@@ -1,7 +1,7 @@
 @use '@carbon/layout';
 
 .modalContent {
-  min-width: min(42rem, 100%);
+  min-width: min(48rem, 100%);
 }
 
 .panel {
@@ -52,42 +52,7 @@
   margin: 0 0 layout.$spacing-03;
 }
 
-.session {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: layout.$spacing-05;
-  padding: layout.$spacing-05;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  gap: layout.$spacing-03;
-  width: 100%;
-  justify-content: space-between;
-}
-
-.timer {
-  font-size: 2.5rem;
-  font-weight: 300;
-  font-variant-numeric: tabular-nums;
-  color: var(--cds-text-primary);
-}
-
-.roomName {
-  color: var(--cds-text-secondary);
-  font-family: monospace;
-  font-size: 0.75rem;
-  margin: layout.$spacing-01 0 0;
-}
-
-.controls {
-  display: flex;
-  gap: layout.$spacing-05;
-  align-items: center;
-}
-
+/* ---- Hero header (pre-connect) ---- */
 
 .heroHeader {
   display: flex;
@@ -109,33 +74,81 @@
   gap: layout.$spacing-03;
 }
 
-.flowPanel {
-  border-top: 1px solid var(--cds-border-subtle-01);
-  display: grid;
+/* ---- Active session ---- */
+
+.session {
+  display: flex;
+  flex-direction: column;
   gap: layout.$spacing-05;
-  padding-top: layout.$spacing-05;
-  width: 100%;
+  padding: layout.$spacing-05;
 }
 
-.flowHeader {
+.header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  gap: layout.$spacing-03;
+  width: 100%;
+  justify-content: space-between;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: layout.$spacing-04;
+}
+
+.timer {
+  font-size: 1.25rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  font-family: monospace;
+  color: var(--cds-text-secondary);
+}
+
+.roomName {
+  color: var(--cds-text-secondary);
+  font-family: monospace;
+  font-size: 0.75rem;
+  margin: layout.$spacing-01 0 0;
+}
+
+.controls {
+  display: flex;
+  gap: layout.$spacing-04;
+  align-items: center;
+}
+
+/* ---- Sections ---- */
+
+.section {
+  border-top: 1px solid var(--cds-border-subtle-01);
+  display: flex;
+  flex-direction: column;
+  gap: layout.$spacing-04;
+  padding-top: layout.$spacing-05;
+  width: 100%;
+
+  > h5 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0;
+  }
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: layout.$spacing-04;
 
   h5 {
-    font-size: 1rem;
+    font-size: 0.875rem;
     font-weight: 600;
     margin: 0;
   }
-
-  p {
-    color: var(--cds-text-secondary);
-    font-size: 0.875rem;
-    line-height: 1.45;
-    margin: layout.$spacing-02 0 0;
-  }
 }
+
+/* ---- Language controls ---- */
 
 .languageControls {
   display: grid;
@@ -159,55 +172,159 @@
   gap: layout.$spacing-02;
 }
 
-.flowGrid {
+/* ---- Step list (compact rows instead of cards) ---- */
+
+.stepList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--cds-border-subtle-01);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.stepRow {
+  display: flex;
+  align-items: center;
+  gap: layout.$spacing-04;
+  padding: layout.$spacing-03 layout.$spacing-04;
+  background: var(--cds-layer-01);
+  transition: background 0.15s;
+}
+
+.stepStatus_running {
+  background: var(--cds-highlight);
+}
+
+.stepStatus_done {
+  background: var(--cds-layer-01);
+}
+
+.stepIndex {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cds-text-secondary);
+  min-width: 1rem;
+  text-align: center;
+}
+
+.stepIconDone {
+  fill: var(--cds-support-success);
+  flex-shrink: 0;
+}
+
+.stepIconRunning {
+  fill: var(--cds-support-info);
+  flex-shrink: 0;
+  animation: spin 1.5s linear infinite;
+}
+
+.stepIconIdle {
+  fill: var(--cds-text-disabled);
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.stepText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stepTitle {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.stepDetail {
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary);
+  line-height: 1.3;
+}
+
+/* ---- Transcript ---- */
+
+.transcript {
+  font-family: monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--cds-layer-02);
+  padding: layout.$spacing-04;
+  border-radius: 4px;
+  margin: 0;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+/* ---- Draft grid ---- */
+
+.draftGrid {
   display: grid;
   gap: layout.$spacing-04;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
 }
 
-.flowStep {
-  display: grid;
-  gap: layout.$spacing-04;
-  min-height: 12rem;
+/* ---- Privacy & health panels ---- */
 
-  p {
-    color: var(--cds-text-secondary);
-    font-size: 0.875rem;
-    line-height: 1.45;
-    margin: 0;
+.bottomPanels {
+  display: grid;
+  gap: layout.$spacing-05;
+  grid-template-columns: 1fr 1fr;
+
+  @media (max-width: 42rem) {
+    grid-template-columns: 1fr;
   }
 }
 
-.flowStepHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: layout.$spacing-03;
-
-  h5 {
-    font-size: 0.875rem;
-    font-weight: 600;
-    margin: 0;
-  }
-}
-
-.previewGrid {
-  display: grid;
-  gap: layout.$spacing-04;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-}
-
-.previewTile {
+.privacyPanel,
+.healthPanel {
   h5 {
     font-size: 0.875rem;
     font-weight: 600;
     margin: 0 0 layout.$spacing-03;
   }
+}
 
-  p {
-    color: var(--cds-text-secondary);
-    font-size: 0.875rem;
-    line-height: 1.45;
-    margin: 0;
+.privacyList,
+.healthList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: layout.$spacing-03;
+}
+
+.privacyItem {
+  display: flex;
+  align-items: center;
+  gap: layout.$spacing-03;
+  font-size: 0.875rem;
+  color: var(--cds-text-secondary);
+
+  svg {
+    fill: var(--cds-support-success);
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
   }
+}
+
+.healthRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: layout.$spacing-03;
+  font-size: 0.875rem;
 }

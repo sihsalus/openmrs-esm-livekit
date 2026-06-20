@@ -6,8 +6,28 @@ import {
   useLocalParticipant,
 } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
-import { Button, InlineLoading, Tag, Tile } from '@carbon/react';
-import { Microphone, MicrophoneOff, StopFilled } from '@carbon/icons-react';
+import {
+  Button,
+  InlineLoading,
+  Tag,
+  Tile,
+  TextArea,
+  TextInput,
+  Accordion,
+  AccordionItem,
+} from '@carbon/react';
+import {
+  Microphone,
+  MicrophoneOff,
+  StopFilled,
+  Play,
+  Checkmark,
+  WarningAlt,
+  CircleDash,
+  InProgress,
+  Security,
+  Save,
+} from '@carbon/icons-react';
 import { useConfig, usePatient } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
 import { fetchLivekitToken, resolveLivekitServerUrl, resolveTokenEndpoint } from './livekit-token';
@@ -21,6 +41,43 @@ interface VoicePanelProps {
 type LanguageCode = 'en' | 'es';
 type FlowStep = 'doctorStt' | 'doctorTranslation' | 'patientTts' | 'patientStt' | 'patientTranslation' | 'openmrsDraft';
 type StepStatus = 'idle' | 'running' | 'done';
+type ServiceStatus = 'ok' | 'error' | 'pending' | 'checking';
+
+interface EncounterDraft {
+  chiefComplaint: string;
+  symptoms: string[];
+  medicationsMentioned: string[];
+  allergiesMentioned: string[];
+  assessmentNotes: string;
+  patientInstructions: string;
+}
+
+interface ServiceHealth {
+  livekit: ServiceStatus;
+  tokenServer: ServiceStatus;
+  openmrs: ServiceStatus;
+  stt: ServiceStatus;
+  tts: ServiceStatus;
+  llm: ServiceStatus;
+}
+
+const DEMO_TRANSCRIPT_DOCTOR =
+  'The patient reports persistent cough for five days, low-grade fever, and mild chest discomfort. No shortness of breath at rest. Currently taking paracetamol 500mg every 8 hours. No known drug allergies. Assessment: likely viral upper respiratory tract infection. Plan: continue paracetamol, increase fluid intake, return if symptoms worsen or if difficulty breathing develops.';
+
+const DEMO_TRANSCRIPT_PATIENT =
+  'He tenido tos por cinco dias, fiebre baja y un poco de molestia en el pecho. No me falta el aire en reposo. Estoy tomando paracetamol cada ocho horas. No soy alergico a ningun medicamento.';
+
+const DEMO_REDACTED_TRANSCRIPT =
+  'Doctor (EN): [PATIENT] reports persistent cough for five days, low-grade fever, and mild chest discomfort. No shortness of breath at rest. Currently taking paracetamol 500mg every 8 hours. No known drug allergies.\n\nPatient (ES): [PATIENT] ha tenido tos por cinco dias, fiebre baja y molestia en el pecho. No le falta el aire en reposo. Toma paracetamol cada ocho horas. Sin alergias conocidas.';
+
+const DEMO_DRAFT: EncounterDraft = {
+  chiefComplaint: 'Persistent cough and low-grade fever for 5 days',
+  symptoms: ['cough', 'low-grade fever', 'mild chest discomfort'],
+  medicationsMentioned: ['paracetamol 500mg q8h'],
+  allergiesMentioned: [],
+  assessmentNotes: 'Likely viral upper respiratory tract infection. No signs of pneumonia. Needs clinician review.',
+  patientInstructions: 'Continue paracetamol, increase fluid intake, return if breathing worsens or fever exceeds 38.5C.',
+};
 
 const initialStepStatus: Record<FlowStep, StepStatus> = {
   doctorStt: 'idle',
@@ -29,6 +86,15 @@ const initialStepStatus: Record<FlowStep, StepStatus> = {
   patientStt: 'idle',
   patientTranslation: 'idle',
   openmrsDraft: 'idle',
+};
+
+const initialHealth: ServiceHealth = {
+  livekit: 'pending',
+  tokenServer: 'pending',
+  openmrs: 'pending',
+  stt: 'pending',
+  tts: 'pending',
+  llm: 'pending',
 };
 
 const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
@@ -147,9 +213,9 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
       audio={false}
       video={false}
       onDisconnected={resetSession}
-      onError={(error) => {
+      onError={(err) => {
         setError(
-          `${error.message}. ${t(
+          `${err.message}. ${t(
             'livekitConnectionHint',
             'Check LiveKit reachability and gateway CSP connect-src for the LiveKit WebSocket URL.',
           )}`,
@@ -163,18 +229,32 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
         patientName={patient?.name?.[0]?.text ?? ''}
         roomName={roomName}
         onEnd={disconnect}
+        livekitUrl={livekitServerUrl}
+        tokenEndpoint={tokenEndpoint}
       />
     </LiveKitRoom>
   );
 };
 
+/* ------------------------------------------------------------------ */
+/* Active session                                                     */
+/* ------------------------------------------------------------------ */
+
 interface ActiveSessionProps {
   patientName: string;
   roomName: string;
   onEnd: () => void;
+  livekitUrl: string;
+  tokenEndpoint: string;
 }
 
-const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, onEnd }) => {
+const ActiveSession: React.FC<ActiveSessionProps> = ({
+  patientName,
+  roomName,
+  onEnd,
+  livekitUrl,
+  tokenEndpoint,
+}) => {
   const { t } = useTranslation();
   const connectionState = useConnectionState();
   const { localParticipant } = useLocalParticipant();
@@ -184,6 +264,11 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
   const [doctorLanguage, setDoctorLanguage] = useState<LanguageCode>('en');
   const [patientLanguage, setPatientLanguage] = useState<LanguageCode>('es');
   const [stepStatus, setStepStatus] = useState<Record<FlowStep, StepStatus>>(initialStepStatus);
+  const [demoRunning, setDemoRunning] = useState(false);
+  const [redactedTranscript, setRedactedTranscript] = useState('');
+  const [draft, setDraft] = useState<EncounterDraft | null>(null);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const [health, setHealth] = useState<ServiceHealth>(initialHealth);
   const timeouts = useRef<number[]>([]);
 
   useEffect(() => {
@@ -193,21 +278,32 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
 
   useEffect(() => {
     return () => {
-      timeouts.current.forEach((timeout) => window.clearTimeout(timeout));
+      timeouts.current.forEach((id) => window.clearTimeout(id));
       timeouts.current = [];
     };
   }, []);
 
+  // Auto-enable mic on connect
   useEffect(() => {
     if (connectionState === ConnectionState.Connected && localParticipant && muted) {
-      localParticipant.setMicrophoneEnabled(true).then(() => {
-        setMuted(false);
-        setMicError(null);
-      }).catch((err) => {
-        setMicError(err?.message || 'Microphone access denied. HTTPS or localhost required for Safari.');
-      });
+      localParticipant
+        .setMicrophoneEnabled(true)
+        .then(() => {
+          setMuted(false);
+          setMicError(null);
+        })
+        .catch((err) => {
+          setMicError(
+            err?.message || 'Microphone access denied. HTTPS or localhost required for Safari.',
+          );
+        });
     }
   }, [connectionState, localParticipant]);
+
+  // Health check on mount
+  useEffect(() => {
+    checkHealth(livekitUrl, tokenEndpoint, setHealth);
+  }, [livekitUrl, tokenEndpoint]);
 
   const toggleMute = useCallback(async () => {
     if (localParticipant) {
@@ -221,18 +317,56 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
     }
   }, [localParticipant, muted]);
 
-  const runStep = useCallback((step: FlowStep) => {
-    setStepStatus((current) => ({ ...current, [step]: 'running' }));
-    const timeout = window.setTimeout(() => {
-      setStepStatus((current) => ({ ...current, [step]: 'done' }));
-    }, 700);
-    timeouts.current.push(timeout);
+  const scheduleTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = window.setTimeout(fn, ms);
+    timeouts.current.push(id);
+    return id;
   }, []);
 
+  const runStep = useCallback(
+    (step: FlowStep, delayMs = 700) => {
+      return new Promise<void>((resolve) => {
+        setStepStatus((cur) => ({ ...cur, [step]: 'running' }));
+        scheduleTimeout(() => {
+          setStepStatus((cur) => ({ ...cur, [step]: 'done' }));
+          resolve();
+        }, delayMs);
+      });
+    },
+    [scheduleTimeout],
+  );
+
+  const runDemoConversation = useCallback(async () => {
+    if (demoRunning) return;
+    setDemoRunning(true);
+    setRedactedTranscript('');
+    setDraft(null);
+    setDraftSaved(false);
+    setStepStatus(initialStepStatus);
+
+    await runStep('doctorStt', 1200);
+    await runStep('doctorTranslation', 1500);
+    await runStep('patientTts', 1000);
+    await runStep('patientStt', 1200);
+    await runStep('patientTranslation', 1500);
+    setRedactedTranscript(DEMO_REDACTED_TRANSCRIPT);
+    await runStep('openmrsDraft', 2000);
+    setDraft({ ...DEMO_DRAFT });
+    setDemoRunning(false);
+  }, [demoRunning, runStep]);
+
   const resetFlow = useCallback(() => {
-    timeouts.current.forEach((timeout) => window.clearTimeout(timeout));
+    timeouts.current.forEach((id) => window.clearTimeout(id));
     timeouts.current = [];
     setStepStatus(initialStepStatus);
+    setRedactedTranscript('');
+    setDraft(null);
+    setDraftSaved(false);
+    setDemoRunning(false);
+  }, []);
+
+  const saveDraft = useCallback(() => {
+    setDraftSaved(true);
   }, []);
 
   const formatTime = (s: number) => {
@@ -243,7 +377,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
 
   const stateLabel =
     connectionState === ConnectionState.Connected
-      ? t('recording', 'Recording')
+      ? t('connected', 'Connected')
       : connectionState === ConnectionState.Connecting
         ? t('connecting', 'Connecting...')
         : t('disconnected', 'Disconnected');
@@ -251,68 +385,61 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
   const stateKind = connectionState === ConnectionState.Connected ? 'green' : 'gray';
   const doctorLanguageLabel = languageLabel(doctorLanguage, t);
   const patientLanguageLabel = languageLabel(patientLanguage, t);
-  const draftReady = stepStatus.openmrsDraft === 'done';
 
   const flowSteps: Array<{
     step: FlowStep;
     title: string;
     detail: string;
-    action: string;
   }> = [
     {
       step: 'doctorStt',
       title: t('doctorStt', 'Doctor STT'),
       detail: t('doctorSttDetail', 'Capture clinician speech and produce a local transcript.'),
-      action: t('captureDoctor', 'Capture doctor'),
     },
     {
       step: 'doctorTranslation',
       title: t('translateForPatient', 'Translate for patient'),
       detail: t('translateForPatientDetail', 'Redact identifiers and translate clinical meaning to the patient language.'),
-      action: t('translateToLanguage', 'Translate to {{language}}', { language: patientLanguageLabel }),
     },
     {
       step: 'patientTts',
       title: t('patientTts', 'Patient TTS'),
       detail: t('patientTtsDetail', 'Play the translated message using the local TTS voice.'),
-      action: t('playPatientAudio', 'Play patient audio'),
     },
     {
       step: 'patientStt',
       title: t('patientStt', 'Patient STT'),
       detail: t('patientSttDetail', 'Capture patient response and transcribe it locally.'),
-      action: t('capturePatient', 'Capture patient'),
     },
     {
       step: 'patientTranslation',
       title: t('translateForDoctor', 'Translate for doctor'),
       detail: t('translateForDoctorDetail', 'Translate the patient response back to the clinician language.'),
-      action: t('translateToLanguage', 'Translate to {{language}}', { language: doctorLanguageLabel }),
     },
     {
       step: 'openmrsDraft',
       title: t('openmrsDraft', 'OpenMRS draft'),
       detail: t('openmrsDraftDetail', 'Compile an anonymized, clinician-reviewable encounter draft.'),
-      action: t('buildDraft', 'Build draft'),
     },
   ];
 
   return (
     <div className={styles.session}>
+      {/* ---- Connection header ---- */}
       <div className={styles.header}>
         <div>
           <h4 className={styles.title}>{patientName}</h4>
           <p className={styles.roomName}>{roomName}</p>
         </div>
-        <Tag type={stateKind} size="sm">
-          {stateLabel}
-        </Tag>
+        <div className={styles.headerRight}>
+          <span className={styles.timer}>{formatTime(elapsed)}</span>
+          <Tag type={stateKind} size="sm">{stateLabel}</Tag>
+        </div>
       </div>
-
-      <div className={styles.timer}>{formatTime(elapsed)}</div>
 
       {micError && <p className={styles.error}>{micError}</p>}
 
+      {/* ---- Controls ---- */}
       <div className={styles.controls}>
         <Button
           kind="ghost"
@@ -323,7 +450,18 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
           onClick={toggleMute}
         />
         <Button
-          kind="danger"
+          kind="primary"
+          size="md"
+          renderIcon={Play}
+          onClick={runDemoConversation}
+          disabled={demoRunning}
+        >
+          {demoRunning
+            ? t('demoRunning', 'Running demo...')
+            : t('runDemo', 'Run demo conversation')}
+        </Button>
+        <Button
+          kind="danger--ghost"
           size="lg"
           hasIconOnly
           renderIcon={StopFilled}
@@ -332,13 +470,11 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
         />
       </div>
 
-      <section className={styles.flowPanel} aria-label={t('translationFlow', 'Translation flow')}>
-        <div className={styles.flowHeader}>
-          <div>
-            <h5>{t('translationFlow', 'Translation flow')}</h5>
-            <p>{t('translationFlowActive', 'Local AI steps for doctor-patient interpretation and OpenMRS drafting.')}</p>
-          </div>
-          <Button kind="ghost" size="sm" onClick={resetFlow}>
+      {/* ---- Local AI pipeline ---- */}
+      <section className={styles.section} aria-label={t('translationFlow', 'Translation flow')}>
+        <div className={styles.sectionHeader}>
+          <h5>{t('localAiPipeline', 'Local AI pipeline')}</h5>
+          <Button kind="ghost" size="sm" onClick={resetFlow} disabled={demoRunning}>
             {t('resetFlow', 'Reset flow')}
           </Button>
         </div>
@@ -356,34 +492,172 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
           />
         </div>
 
-        <div className={styles.flowGrid}>
-          {flowSteps.map((item) => (
-            <FlowStepCard
+        <div className={styles.stepList}>
+          {flowSteps.map((item, i) => (
+            <StepRow
               key={item.step}
+              index={i + 1}
               title={item.title}
               detail={item.detail}
-              action={item.action}
               status={stepStatus[item.step]}
-              onRun={() => runStep(item.step)}
             />
           ))}
         </div>
-
-        <div className={styles.previewGrid}>
-          <Tile className={styles.previewTile}>
-            <h5>{t('safeTranscript', 'Safe transcript')}</h5>
-            <p>{transcriptPreview(stepStatus, t)}</p>
-          </Tile>
-          <Tile className={styles.previewTile}>
-            <h5>{t('openmrsReviewDraft', 'OpenMRS review draft')}</h5>
-            <p>
-              {draftReady
-                ? t('draftReadyPreview', 'Draft ready: chief concern, symptoms, medication mentions, and evidence comments queued for clinician review.')
-                : t('draftPendingPreview', 'Run the flow to prepare an anonymized draft. Nothing is written to OpenMRS until clinician review.')}
-            </p>
-          </Tile>
-        </div>
       </section>
+
+      {/* ---- Redacted transcript ---- */}
+      {redactedTranscript && (
+        <section className={styles.section}>
+          <h5>{t('redactedTranscript', 'Redacted transcript')}</h5>
+          <pre className={styles.transcript}>{redactedTranscript}</pre>
+        </section>
+      )}
+
+      {/* ---- OpenMRS draft ---- */}
+      {draft && (
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <h5>{t('encounterDraft', 'Encounter draft')}</h5>
+            {draftSaved ? (
+              <Tag type="green" size="sm" renderIcon={Checkmark}>
+                {t('queuedForReview', 'Queued for clinician review')}
+              </Tag>
+            ) : (
+              <Button kind="primary" size="sm" renderIcon={Save} onClick={saveDraft}>
+                {t('saveDraft', 'Save draft to OpenMRS')}
+              </Button>
+            )}
+          </div>
+          <div className={styles.draftGrid}>
+            <TextInput
+              id="chief-complaint"
+              labelText={t('chiefComplaint', 'Chief complaint')}
+              value={draft.chiefComplaint}
+              onChange={(e) => setDraft({ ...draft, chiefComplaint: e.target.value })}
+              readOnly={draftSaved}
+            />
+            <TextInput
+              id="symptoms"
+              labelText={t('symptoms', 'Symptoms')}
+              value={draft.symptoms.join(', ')}
+              onChange={(e) =>
+                setDraft({ ...draft, symptoms: e.target.value.split(',').map((s) => s.trim()) })
+              }
+              readOnly={draftSaved}
+            />
+            <TextInput
+              id="medications"
+              labelText={t('medicationsMentioned', 'Medications mentioned')}
+              value={draft.medicationsMentioned.join(', ')}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  medicationsMentioned: e.target.value.split(',').map((s) => s.trim()),
+                })
+              }
+              readOnly={draftSaved}
+            />
+            <TextInput
+              id="allergies"
+              labelText={t('allergiesMentioned', 'Allergies mentioned')}
+              value={
+                draft.allergiesMentioned.length > 0
+                  ? draft.allergiesMentioned.join(', ')
+                  : t('noneReported', 'None reported')
+              }
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  allergiesMentioned: e.target.value.split(',').map((s) => s.trim()),
+                })
+              }
+              readOnly={draftSaved}
+            />
+            <TextArea
+              id="assessment"
+              labelText={t('assessmentNotes', 'Assessment notes')}
+              value={draft.assessmentNotes}
+              onChange={(e) => setDraft({ ...draft, assessmentNotes: e.target.value })}
+              readOnly={draftSaved}
+              rows={2}
+            />
+            <TextArea
+              id="instructions"
+              labelText={t('patientInstructions', 'Patient instructions')}
+              value={draft.patientInstructions}
+              onChange={(e) => setDraft({ ...draft, patientInstructions: e.target.value })}
+              readOnly={draftSaved}
+              rows={2}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* ---- Privacy & service health ---- */}
+      <Accordion>
+        <AccordionItem title={t('privacyAndStatus', 'Privacy & service health')}>
+          <div className={styles.bottomPanels}>
+            <div className={styles.privacyPanel}>
+              <h5>{t('privacyGuarantees', 'Privacy guarantees')}</h5>
+              <ul className={styles.privacyList}>
+                <PrivacyItem icon={Security} text={t('rawAudioNotStored', 'Raw audio not stored')} />
+                <PrivacyItem icon={Security} text={t('localAiProcessing', 'Local AI processing')} />
+                <PrivacyItem icon={Security} text={t('phiRedaction', 'PHI redaction enabled')} />
+                <PrivacyItem
+                  icon={Security}
+                  text={t('clinicianReviewRequired', 'Clinician review required')}
+                />
+                <PrivacyItem
+                  icon={Security}
+                  text={t('offlineCapable', 'Offline-capable architecture')}
+                />
+              </ul>
+            </div>
+            <div className={styles.healthPanel}>
+              <h5>{t('serviceHealth', 'Service health')}</h5>
+              <ul className={styles.healthList}>
+                <HealthRow label="LiveKit" status={health.livekit} />
+                <HealthRow label={t('tokenServer', 'Token server')} status={health.tokenServer} />
+                <HealthRow label="OpenMRS" status={health.openmrs} />
+                <HealthRow label="STT" status={health.stt} />
+                <HealthRow label="TTS" status={health.tts} />
+                <HealthRow label="LLM" status={health.llm} />
+              </ul>
+            </div>
+          </div>
+        </AccordionItem>
+      </Accordion>
+    </div>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/* Sub-components                                                     */
+/* ------------------------------------------------------------------ */
+
+const StepRow: React.FC<{
+  index: number;
+  title: string;
+  detail: string;
+  status: StepStatus;
+}> = ({ index, title, detail, status }) => {
+  const icon =
+    status === 'done' ? (
+      <Checkmark className={styles.stepIconDone} />
+    ) : status === 'running' ? (
+      <InProgress className={styles.stepIconRunning} />
+    ) : (
+      <CircleDash className={styles.stepIconIdle} />
+    );
+
+  return (
+    <div className={`${styles.stepRow} ${styles[`stepStatus_${status}`]}`}>
+      <span className={styles.stepIndex}>{index}</span>
+      {icon}
+      <div className={styles.stepText}>
+        <span className={styles.stepTitle}>{title}</span>
+        <span className={styles.stepDetail}>{detail}</span>
+      </div>
     </div>
   );
 };
@@ -412,67 +686,74 @@ const LanguageToggle: React.FC<LanguageToggleProps> = ({ label, value, onChange 
   );
 };
 
-interface FlowStepCardProps {
-  title: string;
-  detail: string;
-  action: string;
-  status: StepStatus;
-  onRun: () => void;
-}
+const PrivacyItem: React.FC<{ icon: React.ComponentType; text: string }> = ({
+  icon: Icon,
+  text,
+}) => (
+  <li className={styles.privacyItem}>
+    <Icon />
+    <span>{text}</span>
+  </li>
+);
 
-const FlowStepCard: React.FC<FlowStepCardProps> = ({ title, detail, action, status, onRun }) => {
+const HealthRow: React.FC<{ label: string; status: ServiceStatus }> = ({ label, status }) => {
   const { t } = useTranslation();
-  const statusLabel =
-    status === 'done'
-      ? t('done', 'Done')
-      : status === 'running'
-        ? t('running', 'Running')
-        : t('ready', 'Ready');
-  const statusKind = status === 'done' ? 'green' : status === 'running' ? 'blue' : 'gray';
+  const statusLabel: Record<ServiceStatus, string> = {
+    ok: t('healthy', 'Healthy'),
+    error: t('unreachable', 'Unreachable'),
+    pending: t('pendingBackend', 'Pending backend'),
+    checking: t('checking', 'Checking...'),
+  };
+  const tagType: Record<ServiceStatus, string> = {
+    ok: 'green',
+    error: 'red',
+    pending: 'gray',
+    checking: 'blue',
+  };
 
   return (
-    <Tile className={styles.flowStep}>
-      <div className={styles.flowStepHeader}>
-        <h5>{title}</h5>
-        <Tag type={statusKind} size="sm">
-          {statusLabel}
-        </Tag>
-      </div>
-      <p>{detail}</p>
-      <Button kind="tertiary" size="sm" disabled={status === 'running'} onClick={onRun}>
-        {status === 'running' ? t('working', 'Working...') : action}
-      </Button>
-    </Tile>
+    <li className={styles.healthRow}>
+      <span>{label}</span>
+      <Tag type={tagType[status] as 'green' | 'red' | 'gray' | 'blue'} size="sm">
+        {statusLabel[status]}
+      </Tag>
+    </li>
   );
 };
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                            */
+/* ------------------------------------------------------------------ */
 
 function languageLabel(language: LanguageCode, t: ReturnType<typeof useTranslation>['t']) {
   return language === 'en' ? t('english', 'English') : t('spanish', 'Spanish');
 }
 
-function transcriptPreview(stepStatus: Record<FlowStep, StepStatus>, t: ReturnType<typeof useTranslation>['t']) {
-  if (stepStatus.patientTranslation === 'done') {
-    return t(
-      'roundTripTranscriptPreview',
-      'Doctor EN -> Patient ES complete. Patient ES -> Doctor EN complete. Redacted transcript is ready for review.',
-    );
+async function checkHealth(
+  livekitUrl: string,
+  tokenEndpoint: string,
+  setHealth: React.Dispatch<React.SetStateAction<ServiceHealth>>,
+) {
+  setHealth((h) => ({ ...h, livekit: 'checking', tokenServer: 'checking', openmrs: 'checking' }));
+
+  const httpLivekit = livekitUrl.replace(/^ws/, 'http');
+  const checks: Array<{ key: keyof ServiceHealth; url: string }> = [
+    { key: 'livekit', url: httpLivekit },
+    { key: 'tokenServer', url: tokenEndpoint.replace(/\/token$/, '/health') },
+    { key: 'openmrs', url: '/openmrs/ws/fhir2/R4/metadata' },
+  ];
+
+  for (const { key, url } of checks) {
+    try {
+      const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(5000) });
+      setHealth((h) => ({ ...h, [key]: res.ok ? 'ok' : 'error' }));
+    } catch {
+      setHealth((h) => ({ ...h, [key]: 'error' }));
+    }
   }
 
-  if (stepStatus.doctorTranslation === 'done') {
-    return t(
-      'doctorTranslationPreview',
-      'Doctor message translated with identifiers redacted. Waiting for patient response.',
-    );
-  }
-
-  if (stepStatus.doctorStt === 'done') {
-    return t(
-      'doctorSttPreview',
-      'Doctor transcript captured locally. Translation and TTS are pending.',
-    );
-  }
-
-  return t('waitingForAudioPreview', 'Waiting for local audio capture. Raw audio is not stored by this workspace.');
+  // STT, TTS, LLM don't have direct HTTP endpoints from the browser
+  setHealth((h) => ({ ...h, stt: 'pending', tts: 'pending', llm: 'pending' }));
 }
 
 export default VoicePanel;
