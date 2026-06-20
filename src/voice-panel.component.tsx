@@ -144,7 +144,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
       serverUrl={livekitServerUrl}
       token={token}
       connect={true}
-      audio={true}
+      audio={false}
       video={false}
       onDisconnected={resetSession}
       onError={(error) => {
@@ -178,7 +178,8 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
   const { t } = useTranslation();
   const connectionState = useConnectionState();
   const { localParticipant } = useLocalParticipant();
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const [micError, setMicError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [doctorLanguage, setDoctorLanguage] = useState<LanguageCode>('en');
   const [patientLanguage, setPatientLanguage] = useState<LanguageCode>('es');
@@ -197,10 +198,26 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
     };
   }, []);
 
+  useEffect(() => {
+    if (connectionState === ConnectionState.Connected && localParticipant && muted) {
+      localParticipant.setMicrophoneEnabled(true).then(() => {
+        setMuted(false);
+        setMicError(null);
+      }).catch((err) => {
+        setMicError(err?.message || 'Microphone access denied. HTTPS or localhost required for Safari.');
+      });
+    }
+  }, [connectionState, localParticipant]);
+
   const toggleMute = useCallback(async () => {
     if (localParticipant) {
-      await localParticipant.setMicrophoneEnabled(muted);
-      setMuted(!muted);
+      try {
+        await localParticipant.setMicrophoneEnabled(muted);
+        setMuted(!muted);
+        setMicError(null);
+      } catch (err) {
+        setMicError(err instanceof Error ? err.message : 'Microphone access failed');
+      }
     }
   }, [localParticipant, muted]);
 
@@ -293,6 +310,8 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
       </div>
 
       <div className={styles.timer}>{formatTime(elapsed)}</div>
+
+      {micError && <p className={styles.error}>{micError}</p>}
 
       <div className={styles.controls}>
         <Button
