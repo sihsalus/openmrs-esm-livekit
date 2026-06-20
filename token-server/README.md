@@ -79,6 +79,35 @@ Response:
 }
 ```
 
+### POST /synthetic-consultation
+
+Generates deterministic synthetic doctor-patient dialogue and a clinician-reviewable draft. This is for demos and e2e tests without real patient data.
+
+```json
+{
+  "caseId": "pediatric-respiratory",
+  "patientUuid": "synthetic-demo-patient"
+}
+```
+
+Response includes `transcript`, `redactedTranscript`, `draft`, and `openmrsDraftRequest`, which can be sent to `/openmrs/draft`.
+
+Available cases are exposed in `GET /health` under `services.syntheticData.cases`.
+
+### POST /recording/session
+
+Records a local consent manifest for a future recording workflow. It does not capture or store raw audio by default. Real audio recording should be enabled through LiveKit Egress or browser MediaRecorder only after retention, encryption, and consent rules are configured.
+
+```json
+{
+  "patientUuid": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
+  "roomName": "iot-device-aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
+  "consentCaptured": true
+}
+```
+
+Without explicit consent the endpoint returns `consent_required` and does not create a manifest. Consent manifests are stored in `/tmp/openmrs-livekit-recordings.jsonl`.
+
 ### POST /openmrs/draft
 
 Queues a draft locally for clinician review and can optionally create an OpenMRS encounter through the OpenMRS REST API at `/openmrs/ws/rest/v1`.
@@ -135,3 +164,14 @@ OPENMRS_BASIC_AUTH=<base64-user-password-or-full-Basic-header>
 For browser session forwarding, call the helper with `credentials: 'include'`. The helper accepts the OpenMRS session cookie and validates it against `GET /openmrs/ws/rest/v1/session` before attempting `POST /openmrs/ws/rest/v1/encounter`.
 
 Queued drafts are stored in `/tmp/openmrs-livekit-drafts.jsonl`.
+
+## Tests
+
+Run the frontend and helper contract checks locally:
+
+```bash
+yarn test
+yarn test:e2e:token-server
+```
+
+The token-server e2e test starts fake local OpenMRS, Ollama, and LiveKit services, then validates `/health`, PHI redaction, synthetic data generation, recording consent, CORS, and an authenticated OpenMRS encounter write against the fake REST API.

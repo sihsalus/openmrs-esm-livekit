@@ -16,7 +16,9 @@ import jwt
 from local_ai import (
     build_health_response,
     compile_encounter,
+    generate_synthetic_consultation,
     queue_openmrs_draft,
+    recording_session,
     stt_response,
     translate_text,
     tts_response,
@@ -78,6 +80,8 @@ class TokenHandler(BaseHTTPRequestHandler):
 
         handlers = {
             "/compile-encounter": compile_encounter,
+            "/synthetic-consultation": generate_synthetic_consultation,
+            "/recording/session": recording_session,
             "/translate": translate_text,
             "/stt": stt_response,
             "/tts": tts_response,

@@ -21,6 +21,9 @@ OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "45"))
 OPENMRS_BASE_URL = os.environ.get("OPENMRS_BASE_URL", "http://127.0.0.1/openmrs").rstrip("/")
 LIVEKIT_HTTP_URL = os.environ.get("LIVEKIT_HTTP_URL", "http://127.0.0.1:7880").rstrip("/")
 DRAFT_STORE_PATH = os.environ.get("DRAFT_STORE_PATH", "/tmp/openmrs-livekit-drafts.jsonl")
+RECORDING_MANIFEST_PATH = os.environ.get(
+    "RECORDING_MANIFEST_PATH", "/tmp/openmrs-livekit-recordings.jsonl"
+)
 
 OPENMRS_DRAFT_WRITE_ENABLED = os.environ.get("OPENMRS_DRAFT_WRITE_ENABLED", "false").lower() in {
     "1",
@@ -74,6 +77,46 @@ MEDICATION_KEYWORDS = [
     "salbutamol",
 ]
 
+SYNTHETIC_CASES: dict[str, dict[str, Any]] = {
+    "pediatric-respiratory": {
+        "patient": {"display": "Sofia Demo", "age": "4 years", "sex": "female"},
+        "sourceLanguage": "en",
+        "targetLanguage": "es",
+        "transcript": (
+            "Doctor: Sofia Demo has had cough, fever, and sore throat for two days. "
+            "No known drug allergies. The caregiver gave paracetamol yesterday. "
+            "Patient: Me duele la garganta y tengo tos. "
+            "Doctor: Drink fluids and return immediately if breathing becomes difficult."
+        ),
+        "draft": {
+            "chiefComplaint": "Cough, fever, and sore throat for two days",
+            "symptoms": ["cough", "fever", "sore throat"],
+            "medicationsMentioned": ["paracetamol"],
+            "allergiesMentioned": [],
+            "assessmentNotes": "Synthetic respiratory complaint. Clinician review required.",
+            "patientInstructions": "Drink fluids and return immediately if breathing becomes difficult.",
+        },
+    },
+    "adult-diabetes-followup": {
+        "patient": {"display": "Miguel Demo", "age": "52 years", "sex": "male"},
+        "sourceLanguage": "es",
+        "targetLanguage": "en",
+        "transcript": (
+            "Doctor: Miguel Demo viene para control de diabetes. Refiere dolor de cabeza leve "
+            "y nausea desde ayer. Patient: I forgot metformin twice this week. "
+            "Doctor: Revisaremos glucosa, medicacion y signos de alarma."
+        ),
+        "draft": {
+            "chiefComplaint": "Diabetes follow-up with headache and nausea",
+            "symptoms": ["headache", "nausea"],
+            "medicationsMentioned": ["metformin"],
+            "allergiesMentioned": [],
+            "assessmentNotes": "Synthetic diabetes follow-up. Clinician review required.",
+            "patientInstructions": "Review glucose, medications, and warning signs with the clinician.",
+        },
+    },
+}
+
 
 def build_health_response(room_prefix: str) -> dict[str, Any]:
     ollama = _probe_ollama()
@@ -103,6 +146,17 @@ def build_health_response(room_prefix: str) -> dict[str, Any]:
             "contract": "POST /compile-encounter",
         },
         "openmrsDraftWrite": _openmrs_write_status(),
+        "syntheticData": {
+            "status": "ok",
+            "contract": "POST /synthetic-consultation",
+            "cases": sorted(SYNTHETIC_CASES.keys()),
+        },
+        "recording": {
+            "status": "manifest_only",
+            "contract": "POST /recording/session",
+            "rawAudioStoredByDefault": False,
+            "egressConfigured": bool(os.environ.get("LIVEKIT_EGRESS_URL")),
+        },
     }
     core_ok = all(services[name]["status"] == "ok" for name in ("livekit", "openmrs", "ollama"))
 
@@ -203,6 +257,81 @@ def tts_response(body: dict[str, Any]) -> dict[str, Any]:
         "audioFormat": None,
         "text": body.get("text") or "",
         "message": "Local TTS endpoint contract is ready. Install Piper to return generated audio.",
+    }
+
+
+def generate_synthetic_consultation(body: dict[str, Any]) -> dict[str, Any]:
+    case_id = str(body.get("caseId") or "pediatric-respiratory")
+    case = SYNTHETIC_CASES.get(case_id) or SYNTHETIC_CASES["pediatric-respiratory"]
+    patient = dict(case["patient"])
+    patient["synthetic"] = True
+    patient_uuid = str(body.get("patientUuid") or f"synthetic-{case_id}")
+    transcript = str(body.get("transcript") or case["transcript"])
+    redacted_transcript = redact_phi(transcript, [patient.get("display")])
+    draft = _normalize_draft(case.get("draft") or _heuristic_draft(redacted_transcript))
+
+    return {
+        "status": "ok",
+        "caseId": case_id if case_id in SYNTHETIC_CASES else "pediatric-respiratory",
+        "synthetic": True,
+        "sourceLanguage": body.get("sourceLanguage") or case.get("sourceLanguage", "en"),
+        "targetLanguage": body.get("targetLanguage") or case.get("targetLanguage", "es"),
+        "patient": {**patient, "uuid": patient_uuid},
+        "transcript": transcript,
+        "redactedTranscript": redacted_transcript,
+        "draft": draft,
+        "openmrsDraftRequest": {
+            "patientUuid": patient_uuid,
+            "redactedTranscript": redacted_transcript,
+            "draft": draft,
+        },
+        "privacy": {
+            "containsRealPatientData": False,
+            "safeForDemoRecording": True,
+            "rawAudioStored": False,
+            "redactionApplied": True,
+        },
+    }
+
+
+def recording_session(body: dict[str, Any]) -> dict[str, Any]:
+    consent = bool(body.get("consent") or body.get("consentCaptured"))
+    if not consent:
+        return {
+            "status": "consent_required",
+            "recordingStatus": "not_started",
+            "rawAudioStored": False,
+            "message": "Recording requires explicit patient consent before any media or manifest is created.",
+        }
+
+    session_id = str(body.get("sessionId") or uuid.uuid4())
+    record = {
+        "id": session_id,
+        "createdAt": int(time.time()),
+        "patientUuid": body.get("patientUuid"),
+        "roomName": body.get("roomName"),
+        "consentCaptured": True,
+        "recordingStatus": "manifest_recorded",
+        "mediaRecording": "not_configured",
+        "rawAudioStored": False,
+        "storage": {
+            "manifestPath": RECORDING_MANIFEST_PATH,
+            "mediaPath": None,
+        },
+        "retention": body.get("retention") or "demo-session-only",
+        "source": "openmrs-livekit-local-ai",
+    }
+    with open(RECORDING_MANIFEST_PATH, "a", encoding="utf-8") as file:
+        file.write(json.dumps(record, ensure_ascii=True) + "\n")
+
+    return {
+        "status": "queued",
+        "recordingId": session_id,
+        "recordingStatus": "manifest_recorded",
+        "mediaRecording": "not_configured",
+        "rawAudioStored": False,
+        "message": "Consent manifest recorded locally. Configure LiveKit Egress or browser MediaRecorder to capture audio.",
+        "recording": record,
     }
 
 

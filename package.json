@@ -22,6 +22,7 @@
     "lint": "eslint src --ext js,jsx,ts,tsx --max-warnings 0",
     "typescript": "tsc",
     "test": "cross-env TZ=UTC vitest run --passWithNoTests",
+    "test:e2e:token-server": "python3 token-server/e2e_contract_test.py",
     "test:watch": "cross-env TZ=UTC vitest watch",
     "extract-translations": "i18next 'src/**/*.component.tsx' --config ./tools/i18next-parser.config.js"
   },
