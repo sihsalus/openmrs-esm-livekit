@@ -31,6 +31,9 @@ import {
 import { useConfig, usePatient } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
 import { fetchLivekitToken, resolveLivekitServerUrl, resolveTokenEndpoint } from './livekit-token';
+import { useAgentData } from './use-agent-data';
+import AudioVisualizer from './audio-visualizer.component';
+import PatientContext from './patient-context.component';
 import type { Config } from './config-schema';
 import styles from './voice-panel.scss';
 
@@ -195,6 +198,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
             <dd>{roomPrefix}</dd>
           </div>
         </dl>
+        <PatientContext />
         {error && <p className={styles.error}>{error}</p>}
         <Button kind="primary" renderIcon={Microphone} onClick={connect} disabled={connecting}>
           {connecting
@@ -270,6 +274,8 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const [draftSaved, setDraftSaved] = useState(false);
   const [health, setHealth] = useState<ServiceHealth>(initialHealth);
   const timeouts = useRef<number[]>([]);
+  const { transcripts: agentTranscripts, agentDraft, agentStatus, agentError, clearTranscripts } =
+    useAgentData();
 
   useEffect(() => {
     const interval = setInterval(() => setElapsed((e) => e + 1), 1000);
@@ -304,6 +310,20 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   useEffect(() => {
     checkHealth(livekitUrl, tokenEndpoint, setHealth);
   }, [livekitUrl, tokenEndpoint]);
+
+  // Merge agent data into UI when real data arrives
+  useEffect(() => {
+    if (agentDraft && !demoRunning) {
+      setDraft(agentDraft);
+    }
+  }, [agentDraft, demoRunning]);
+
+  const liveTranscriptText = useMemo(() => {
+    if (agentTranscripts.length === 0) return '';
+    return agentTranscripts
+      .map((t) => `${t.role === 'doctor' ? 'Doctor' : 'Patient'} (${t.language.toUpperCase()}): ${t.redacted || t.text}`)
+      .join('\n\n');
+  }, [agentTranscripts]);
 
   const toggleMute = useCallback(async () => {
     if (localParticipant) {
@@ -363,7 +383,8 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     setDraft(null);
     setDraftSaved(false);
     setDemoRunning(false);
-  }, []);
+    clearTranscripts();
+  }, [clearTranscripts]);
 
   const saveDraft = useCallback(() => {
     setDraftSaved(true);
@@ -438,6 +459,11 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       </div>
 
       {micError && <p className={styles.error}>{micError}</p>}
+      {agentError && <p className={styles.error}>{agentError}</p>}
+
+      {/* ---- Audio visualizer ---- */}
+      {!muted && <AudioVisualizer width={280} height={40} barCount={32} className={styles.visualizer} />}
+      {agentStatus && <p className={styles.agentStatus}>{agentStatus}</p>}
 
       {/* ---- Controls ---- */}
       <div className={styles.controls}>
@@ -505,7 +531,15 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
         </div>
       </section>
 
-      {/* ---- Redacted transcript ---- */}
+      {/* ---- Live transcript (from agent data channel) ---- */}
+      {liveTranscriptText && (
+        <section className={styles.section}>
+          <h5>{t('liveTranscript', 'Live transcript')}</h5>
+          <pre className={styles.transcript}>{liveTranscriptText}</pre>
+        </section>
+      )}
+
+      {/* ---- Redacted transcript (from demo or compile-encounter) ---- */}
       {redactedTranscript && (
         <section className={styles.section}>
           <h5>{t('redactedTranscript', 'Redacted transcript')}</h5>

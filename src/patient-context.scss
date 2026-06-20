@@ -1,0 +1,43 @@
+@use '@carbon/layout';
+
+.context {
+  border-top: 1px solid var(--cds-border-subtle-01);
+  padding-top: layout.$spacing-04;
+  width: 100%;
+}
+
+.contextTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0 0 layout.$spacing-03;
+}
+
+.emptyState {
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.contextGrid {
+  display: grid;
+  gap: layout.$spacing-04;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.contextGroup {
+  display: flex;
+  flex-direction: column;
+  gap: layout.$spacing-02;
+}
+
+.contextLabel {
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.tagWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: layout.$spacing-02;
+}

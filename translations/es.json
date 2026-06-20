@@ -79,5 +79,13 @@
   "healthy": "Activo",
   "unreachable": "Inalcanzable",
   "pendingBackend": "Pendiente backend",
-  "checking": "Verificando..."
+  "checking": "Verificando...",
+  "liveTranscript": "Transcripción en vivo",
+  "patientContext": "Contexto del paciente",
+  "activeConditions": "Condiciones activas",
+  "knownAllergies": "Alergias conocidas",
+  "activeMedications": "Medicamentos activos",
+  "noneOnFile": "Sin registros",
+  "noPatientContext": "No hay condiciones activas, alergias ni medicamentos registrados.",
+  "nkda": "Sin alergias conocidas"
 }

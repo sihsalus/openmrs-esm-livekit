@@ -118,6 +118,19 @@
   align-items: center;
 }
 
+.visualizer {
+  align-self: center;
+  border-radius: 4px;
+}
+
+.agentStatus {
+  color: var(--cds-text-secondary);
+  font-size: 0.8125rem;
+  font-style: italic;
+  margin: 0;
+  text-align: center;
+}
+
 /* ---- Sections ---- */
 
 .section {
