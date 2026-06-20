@@ -1,7 +1,7 @@
-"""Minimal LiveKit token server for development.
+"""Local OpenMRS LiveKit helper service.
 
-Generates JWT tokens for LiveKit rooms. In production, this should be
-integrated into the OpenMRS backend as a module or secured endpoint.
+Generates JWT tokens for LiveKit rooms and exposes local-AI demo endpoints for
+an offline doctor-patient translation workflow.
 
 Usage:
     LIVEKIT_API_KEY=... LIVEKIT_API_SECRET=... python server.py
@@ -10,9 +10,17 @@ Usage:
 import json
 import os
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import jwt
+from local_ai import (
+    build_health_response,
+    compile_encounter,
+    queue_openmrs_draft,
+    stt_response,
+    translate_text,
+    tts_response,
+)
 
 API_KEY = os.environ.get("LIVEKIT_API_KEY", "APICSg8zBzkj8ip")
 API_SECRET = os.environ.get("LIVEKIT_API_SECRET", "EKXBwcBozWQbzBbZqLyf9MGtvptpE59E884wwfwe5qcA")
@@ -42,28 +50,44 @@ def create_token(room_name: str, identity: str) -> str:
 
 class TokenHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path != "/health":
-            self.send_error(404)
+        path = self._path()
+        if path == "/health":
+            self._send_json(build_health_response(ROOM_PREFIX))
             return
 
-        self.send_response(200)
-        self._cors_headers()
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps({"status": "ok", "roomPrefix": ROOM_PREFIX}).encode())
+        self.send_error(404)
 
     def do_OPTIONS(self):
-        self.send_response(200)
+        self.send_response(204)
         self._cors_headers()
         self.end_headers()
 
     def do_POST(self):
-        if self.path != "/token":
+        path = self._path()
+
+        if path == "/token":
+            self._handle_token()
+            return
+
+        handlers = {
+            "/compile-encounter": compile_encounter,
+            "/translate": translate_text,
+            "/stt": stt_response,
+            "/tts": tts_response,
+            "/openmrs/draft": queue_openmrs_draft,
+        }
+        handler = handlers.get(path)
+        if not handler:
             self.send_error(404)
             return
 
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length)) if length else {}
+        try:
+            self._send_json(handler(self._read_json()))
+        except Exception as error:
+            self._send_json({"status": "error", "error": str(error)}, status=500)
+
+    def _handle_token(self):
+        body = self._read_json()
 
         patient_uuid = sanitize_room_part(body.get("patientUuid", "unknown"))
         room_prefix = body.get("roomPrefix") or ROOM_PREFIX
@@ -73,20 +97,32 @@ class TokenHandler(BaseHTTPRequestHandler):
         identity = f"clinician-{int(time.time())}"
 
         token = create_token(room_name, identity)
+        self._send_json({"token": token, "roomName": room_name})
 
-        self.send_response(200)
+    def _path(self):
+        return self.path.split("?", 1)[0]
+
+    def _read_json(self):
+        length = int(self.headers.get("Content-Length", 0))
+        if not length:
+            return {}
+        return json.loads(self.rfile.read(length))
+
+    def _send_json(self, payload, status=200):
+        self.send_response(status)
         self._cors_headers()
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(json.dumps({"token": token, "roomName": room_name}).encode())
+        self.wfile.write(json.dumps(payload).encode())
 
     def _cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     def log_message(self, format, *args):
-        print(f"[token-server] {args[0]}")
+        message = format % args if args else format
+        print(f"[token-server] {message}")
 
 
 def sanitize_room_part(value: str) -> str:
@@ -94,6 +130,6 @@ def sanitize_room_part(value: str) -> str:
 
 
 if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", PORT), TokenHandler)
-    print(f"Token server listening on :{PORT}")
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), TokenHandler)
+    print(f"OpenMRS LiveKit helper listening on :{PORT}")
     server.serve_forever()
