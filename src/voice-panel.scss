@@ -1,0 +1,54 @@
+@use '@carbon/layout';
+
+.panel {
+  padding: layout.$spacing-05;
+  display: flex;
+  flex-direction: column;
+  gap: layout.$spacing-04;
+}
+
+.title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.patientName {
+  color: var(--cds-text-secondary);
+  margin: 0 0 layout.$spacing-04;
+}
+
+.error {
+  color: var(--cds-support-error);
+  font-size: 0.875rem;
+  margin: 0 0 layout.$spacing-03;
+}
+
+.session {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: layout.$spacing-05;
+  padding: layout.$spacing-05;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: layout.$spacing-03;
+  width: 100%;
+  justify-content: space-between;
+}
+
+.timer {
+  font-size: 2.5rem;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  color: var(--cds-text-primary);
+}
+
+.controls {
+  display: flex;
+  gap: layout.$spacing-05;
+  align-items: center;
+}

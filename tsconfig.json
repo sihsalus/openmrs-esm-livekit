@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "module": "esnext",
+    "allowSyntheticDefaultImports": true,
+    "jsx": "react",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "lib": ["dom", "es5", "scripthost", "es2015", "es2018", "es2020", "es2022"],
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "target": "esnext"
+  }
+}

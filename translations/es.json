@@ -1,0 +1,11 @@
+{
+  "voiceConsultation": "Consulta por voz",
+  "startConsultation": "Iniciar consulta",
+  "endConsultation": "Finalizar consulta",
+  "connecting": "Conectando...",
+  "recording": "Grabando",
+  "disconnected": "Desconectado",
+  "mute": "Silenciar",
+  "unmute": "Activar micrófono",
+  "loadingPatient": "Cargando paciente..."
+}

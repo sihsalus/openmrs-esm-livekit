@@ -1,0 +1,25 @@
+import { getAsyncLifecycle, defineConfigSchema } from '@openmrs/esm-framework';
+import { configSchema } from './config-schema';
+
+const moduleName = '@sihsalus/esm-livekit-app';
+
+const options = {
+  featureName: 'livekit-voice',
+  moduleName,
+};
+
+export const importTranslation = require.context('../translations', false, /.json$/, 'lazy');
+
+export function startupApp() {
+  defineConfigSchema(moduleName, configSchema);
+}
+
+export const livekitVoiceButton = getAsyncLifecycle(
+  () => import('./voice-button.component'),
+  options,
+);
+
+export const livekitVoicePanel = getAsyncLifecycle(
+  () => import('./voice-panel.component'),
+  options,
+);

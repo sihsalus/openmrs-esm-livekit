@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.yarn/*
+!.yarn/releases
+!.yarn/plugins
+.pnp.*
+*.tsbuildinfo
+.turbo/
+__pycache__/
+*.pyc
+.env

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.openmrs.org/routes.schema.json",
+  "backendDependencies": {
+    "fhir2": ">=1.2",
+    "webservices.rest": ">=2.2.0"
+  },
+  "extensions": [
+    {
+      "name": "livekit-voice-button",
+      "component": "livekitVoiceButton",
+      "slot": "patient-chart-header-actions-slot"
+    },
+    {
+      "name": "livekit-voice-panel",
+      "component": "livekitVoicePanel",
+      "slot": "patient-chart-workspace-slot",
+      "meta": {
+        "title": "Voice Consultation"
+      }
+    }
+  ],
+  "pages": []
+}

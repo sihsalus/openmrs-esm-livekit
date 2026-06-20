@@ -1,0 +1,11 @@
+{
+  "voiceConsultation": "Voice consultation",
+  "startConsultation": "Start consultation",
+  "endConsultation": "End consultation",
+  "connecting": "Connecting...",
+  "recording": "Recording",
+  "disconnected": "Disconnected",
+  "mute": "Mute",
+  "unmute": "Unmute",
+  "loadingPatient": "Loading patient..."
+}
