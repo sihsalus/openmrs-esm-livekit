@@ -69,12 +69,18 @@ class TokenHandler(BaseHTTPRequestHandler):
             self._handle_token()
             return
 
+        if path == "/openmrs/draft":
+            try:
+                self._send_json(queue_openmrs_draft(self._read_json(), self._request_context()))
+            except Exception as error:
+                self._send_json({"status": "error", "error": str(error)}, status=500)
+            return
+
         handlers = {
             "/compile-encounter": compile_encounter,
             "/translate": translate_text,
             "/stt": stt_response,
             "/tts": tts_response,
-            "/openmrs/draft": queue_openmrs_draft,
         }
         handler = handlers.get(path)
         if not handler:
@@ -108,6 +114,13 @@ class TokenHandler(BaseHTTPRequestHandler):
             return {}
         return json.loads(self.rfile.read(length))
 
+    def _request_context(self):
+        return {
+            "authorization": self.headers.get("Authorization"),
+            "cookie": self.headers.get("Cookie"),
+            "origin": self.headers.get("Origin"),
+        }
+
     def _send_json(self, payload, status=200):
         self.send_response(status)
         self._cors_headers()
@@ -116,7 +129,13 @@ class TokenHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(payload).encode())
 
     def _cors_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self.headers.get("Origin")
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.send_header("Vary", "Origin")
+        else:
+            self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 

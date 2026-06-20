@@ -27,7 +27,7 @@ Returns local service status for the frontend status panel.
 }
 ```
 
-Detailed service status is available under `services`.
+Detailed service status is available under `services`, including `services.openmrsDraftWrite` for OpenMRS REST write readiness.
 
 ### POST /token
 
@@ -81,15 +81,57 @@ Response:
 
 ### POST /openmrs/draft
 
-Queues a draft locally for clinician review. This intentionally does not write to OpenMRS yet.
+Queues a draft locally for clinician review and can optionally create an OpenMRS encounter through the OpenMRS REST API at `/openmrs/ws/rest/v1`.
+
+By default this endpoint is safe: it queues locally and returns a preview of the OpenMRS encounter payload without writing to OpenMRS.
 
 ```json
 {
   "status": "queued",
   "draftId": "uuid",
   "clinicianReviewRequired": true,
-  "openmrsWrite": "disabled"
+  "openmrsWrite": "queued_only",
+  "openmrs": {
+    "writeRequested": false,
+    "writeEnabled": false,
+    "encounterPayload": {
+      "encounterDatetime": "2026-06-20T18:10:00.000+0000",
+      "patient": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
+      "encounterType": "...",
+      "location": "...",
+      "obs": [{"concept": "...", "value": "AI-generated clinical draft..."}]
+    }
+  }
 }
 ```
+
+To request a real OpenMRS write, send `writeToOpenmrs: true` or `mode: "write"`. The server will only write when `OPENMRS_DRAFT_WRITE_ENABLED=true` and the required metadata is configured.
+
+Required write configuration:
+
+```bash
+OPENMRS_DRAFT_WRITE_ENABLED=true
+OPENMRS_ENCOUNTER_TYPE_UUID=<encounter-type-uuid>
+OPENMRS_LOCATION_UUID=<location-uuid>
+OPENMRS_DRAFT_OBS_CONCEPT_UUID=<text-concept-uuid-for-ai-draft>
+```
+
+Optional provider metadata:
+
+```bash
+OPENMRS_PROVIDER_UUID=<provider-uuid>
+OPENMRS_ENCOUNTER_ROLE_UUID=<encounter-role-uuid>
+```
+
+Authentication can be supplied either by server environment or forwarded from the O3 frontend request:
+
+```bash
+OPENMRS_USERNAME=<username>
+OPENMRS_PASSWORD=<password>
+# or
+OPENMRS_BASIC_AUTH=<base64-user-password-or-full-Basic-header>
+```
+
+For browser session forwarding, call the helper with `credentials: 'include'`. The helper accepts the OpenMRS session cookie and validates it against `GET /openmrs/ws/rest/v1/session` before attempting `POST /openmrs/ws/rest/v1/encounter`.
 
 Queued drafts are stored in `/tmp/openmrs-livekit-drafts.jsonl`.
