@@ -8,7 +8,7 @@
     {
       "name": "livekit-voice-button",
       "component": "livekitVoiceButton",
-      "slot": "patient-chart-header-actions-slot"
+      "slot": "patient-actions-slot"
     },
     {
       "name": "livekit-voice-panel",
