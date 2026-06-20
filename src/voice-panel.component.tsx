@@ -1,17 +1,16 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   LiveKitRoom,
   RoomAudioRenderer,
   useConnectionState,
   useLocalParticipant,
-  useTracks,
 } from '@livekit/components-react';
-import { ConnectionState, Track } from 'livekit-client';
+import { ConnectionState } from 'livekit-client';
 import { Button, InlineLoading, Tag, Tile } from '@carbon/react';
-import { Microphone, MicrophoneOff, StopFilled } from '@carbon/react/icons';
+import { Microphone, MicrophoneOff, StopFilled } from '@carbon/icons-react';
 import { useConfig, usePatient } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
-import { fetchLivekitToken } from './livekit-token';
+import { fetchLivekitToken, resolveLivekitServerUrl, resolveTokenEndpoint } from './livekit-token';
 import type { Config } from './config-schema';
 import styles from './voice-panel.scss';
 
@@ -23,31 +22,52 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
   const { t } = useTranslation();
   const config = useConfig<Config>();
   const { patient, isLoading: patientLoading } = usePatient();
+  const livekitServerUrl = useMemo(
+    () => resolveLivekitServerUrl(config.livekitServerUrl),
+    [config.livekitServerUrl],
+  );
+  const tokenEndpoint = useMemo(() => resolveTokenEndpoint(config.tokenEndpoint), [config.tokenEndpoint]);
+  const roomPrefix = config.roomPrefix || 'iot-device-';
   const [token, setToken] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
 
   const connect = useCallback(async () => {
-    if (!patient?.id) return;
+    if (!patient?.id) {
+      setError(t('missingPatient', 'No patient context is available for this voice consultation.'));
+      return;
+    }
     setConnecting(true);
     setError(null);
     try {
-      const result = await fetchLivekitToken(patient.id, config.tokenEndpoint);
+      const result = await fetchLivekitToken(patient.id, tokenEndpoint, roomPrefix);
       setToken(result.token);
       setRoomName(result.roomName);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to connect');
+      setError(
+        e instanceof Error
+          ? `${e.message}. ${t(
+              'tokenServerHint',
+              'Check that the token server is running and that gateway CSP allows this endpoint.',
+            )}`
+          : t('failedToConnect', 'Failed to connect'),
+      );
     } finally {
       setConnecting(false);
     }
-  }, [patient?.id, config.tokenEndpoint]);
+  }, [patient?.id, roomPrefix, t, tokenEndpoint]);
 
   const disconnect = useCallback(() => {
     setToken(null);
     setRoomName('');
     onClose?.();
   }, [onClose]);
+
+  const resetSession = useCallback(() => {
+    setToken(null);
+    setRoomName('');
+  }, []);
 
   if (patientLoading) {
     return (
@@ -62,13 +82,22 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
       <Tile className={styles.panel}>
         <h4 className={styles.title}>{t('voiceConsultation', 'Voice consultation')}</h4>
         <p className={styles.patientName}>{patient?.name?.[0]?.text ?? ''}</p>
+        <dl className={styles.connectionDetails}>
+          <div>
+            <dt>{t('livekitServer', 'LiveKit')}</dt>
+            <dd>{livekitServerUrl}</dd>
+          </div>
+          <div>
+            <dt>{t('tokenServer', 'Token server')}</dt>
+            <dd>{tokenEndpoint}</dd>
+          </div>
+          <div>
+            <dt>{t('roomPrefix', 'Room prefix')}</dt>
+            <dd>{roomPrefix}</dd>
+          </div>
+        </dl>
         {error && <p className={styles.error}>{error}</p>}
-        <Button
-          kind="primary"
-          renderIcon={Microphone}
-          onClick={connect}
-          disabled={connecting}
-        >
+        <Button kind="primary" renderIcon={Microphone} onClick={connect} disabled={connecting}>
           {connecting
             ? t('connecting', 'Connecting...')
             : t('startConsultation', 'Start consultation')}
@@ -79,12 +108,21 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
 
   return (
     <LiveKitRoom
-      serverUrl={config.livekitServerUrl}
+      serverUrl={livekitServerUrl}
       token={token}
       connect={true}
       audio={true}
       video={false}
-      onDisconnected={disconnect}
+      onDisconnected={resetSession}
+      onError={(error) => {
+        setError(
+          `${error.message}. ${t(
+            'livekitConnectionHint',
+            'Check LiveKit reachability and gateway CSP connect-src for the LiveKit WebSocket URL.',
+          )}`,
+        );
+        resetSession();
+      }}
       className={styles.panel}
     >
       <RoomAudioRenderer />
@@ -140,7 +178,10 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({ patientName, roomName, on
   return (
     <div className={styles.session}>
       <div className={styles.header}>
-        <h4 className={styles.title}>{patientName}</h4>
+        <div>
+          <h4 className={styles.title}>{patientName}</h4>
+          <p className={styles.roomName}>{roomName}</p>
+        </div>
         <Tag type={stateKind} size="sm">
           {stateLabel}
         </Tag>

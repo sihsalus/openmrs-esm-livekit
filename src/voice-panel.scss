@@ -18,6 +18,30 @@
   margin: 0 0 layout.$spacing-04;
 }
 
+.connectionDetails {
+  display: grid;
+  gap: layout.$spacing-03;
+  margin: 0 0 layout.$spacing-04;
+
+  div {
+    display: grid;
+    gap: layout.$spacing-01;
+  }
+
+  dt {
+    color: var(--cds-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  dd {
+    font-family: monospace;
+    font-size: 0.75rem;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
 .error {
   color: var(--cds-support-error);
   font-size: 0.875rem;
@@ -45,6 +69,13 @@
   font-weight: 300;
   font-variant-numeric: tabular-nums;
   color: var(--cds-text-primary);
+}
+
+.roomName {
+  color: var(--cds-text-secondary);
+  font-family: monospace;
+  font-size: 0.75rem;
+  margin: layout.$spacing-01 0 0;
 }
 
 .controls {

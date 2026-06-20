@@ -7,5 +7,12 @@
   "disconnected": "Disconnected",
   "mute": "Mute",
   "unmute": "Unmute",
-  "loadingPatient": "Loading patient..."
+  "loadingPatient": "Loading patient...",
+  "failedToConnect": "Failed to connect",
+  "livekitConnectionHint": "Check LiveKit reachability and gateway CSP connect-src for the LiveKit WebSocket URL.",
+  "livekitServer": "LiveKit",
+  "missingPatient": "No patient context is available for this voice consultation.",
+  "roomPrefix": "Room prefix",
+  "tokenServer": "Token server",
+  "tokenServerHint": "Check that the token server is running and that gateway CSP allows this endpoint."
 }

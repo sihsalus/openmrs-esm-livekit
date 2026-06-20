@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { Button } from '@carbon/react';
-import { Microphone } from '@carbon/react/icons';
+import { Microphone } from '@carbon/icons-react';
 import { useTranslation } from 'react-i18next';
 import { launchWorkspace } from '@openmrs/esm-framework';
 
