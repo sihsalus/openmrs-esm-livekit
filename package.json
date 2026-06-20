@@ -18,7 +18,7 @@
     "start": "openmrs develop",
     "serve": "rspack serve --mode=development",
     "build": "rspack --mode production",
-    "prepack": "yarn build",
+    "prepack": "corepack yarn build",
     "lint": "eslint src --ext js,jsx,ts,tsx --max-warnings 0",
     "typescript": "tsc",
     "test": "cross-env TZ=UTC vitest run --passWithNoTests",
