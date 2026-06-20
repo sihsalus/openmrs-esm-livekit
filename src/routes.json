@@ -8,11 +8,10 @@
     {
       "name": "livekit-voice-button",
       "component": "livekitVoiceButton",
-      "slot": "patient-chart-summary-dashboard-slot",
-      "order": 0,
-      "meta": {
-        "fullWidth": false
-      }
+      "slot": "patient-actions-slot",
+      "order": 50,
+      "online": true,
+      "offline": false
     },
     {
       "name": "livekit-voice-panel",
@@ -20,7 +19,9 @@
       "slot": "patient-chart-workspace-slot",
       "meta": {
         "title": "Voice Consultation"
-      }
+      },
+      "online": true,
+      "offline": false
     }
   ],
   "pages": []
