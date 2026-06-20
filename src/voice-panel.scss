@@ -83,3 +83,127 @@
   gap: layout.$spacing-05;
   align-items: center;
 }
+
+
+.heroHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: layout.$spacing-04;
+}
+
+.description {
+  color: var(--cds-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.pipelinePreview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: layout.$spacing-03;
+}
+
+.flowPanel {
+  border-top: 1px solid var(--cds-border-subtle-01);
+  display: grid;
+  gap: layout.$spacing-05;
+  padding-top: layout.$spacing-05;
+  width: 100%;
+}
+
+.flowHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: layout.$spacing-04;
+
+  h5 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  p {
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    margin: layout.$spacing-02 0 0;
+  }
+}
+
+.languageControls {
+  display: grid;
+  gap: layout.$spacing-04;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+
+.languageToggle {
+  display: grid;
+  gap: layout.$spacing-03;
+
+  > span {
+    color: var(--cds-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+}
+
+.segmentedButtons {
+  display: flex;
+  gap: layout.$spacing-02;
+}
+
+.flowGrid {
+  display: grid;
+  gap: layout.$spacing-04;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.flowStep {
+  display: grid;
+  gap: layout.$spacing-04;
+  min-height: 12rem;
+
+  p {
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    margin: 0;
+  }
+}
+
+.flowStepHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: layout.$spacing-03;
+
+  h5 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0;
+  }
+}
+
+.previewGrid {
+  display: grid;
+  gap: layout.$spacing-04;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.previewTile {
+  h5 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0 0 layout.$spacing-03;
+  }
+
+  p {
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    margin: 0;
+  }
+}
