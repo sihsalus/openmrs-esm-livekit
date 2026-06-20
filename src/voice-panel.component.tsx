@@ -30,7 +30,13 @@ import {
 } from '@carbon/icons-react';
 import { useConfig, usePatient } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
-import { fetchLivekitToken, resolveLivekitServerUrl, resolveTokenEndpoint } from './livekit-token';
+import {
+  fetchLivekitToken,
+  resolveLivekitServerUrl,
+  resolveTokenEndpoint,
+  resolveTokenServerPath,
+  saveOpenmrsDraft,
+} from './livekit-token';
 import { useAgentData } from './use-agent-data';
 import AudioVisualizer from './audio-visualizer.component';
 import PatientContext from './patient-context.component';
@@ -42,7 +48,13 @@ interface VoicePanelProps {
 }
 
 type LanguageCode = 'en' | 'es';
-type FlowStep = 'doctorStt' | 'doctorTranslation' | 'patientTts' | 'patientStt' | 'patientTranslation' | 'openmrsDraft';
+type FlowStep =
+  | 'doctorStt'
+  | 'doctorTranslation'
+  | 'patientTts'
+  | 'patientStt'
+  | 'patientTranslation'
+  | 'openmrsDraft';
 type StepStatus = 'idle' | 'running' | 'done';
 type ServiceStatus = 'ok' | 'error' | 'pending' | 'checking';
 
@@ -78,8 +90,10 @@ const DEMO_DRAFT: EncounterDraft = {
   symptoms: ['cough', 'low-grade fever', 'mild chest discomfort'],
   medicationsMentioned: ['paracetamol 500mg q8h'],
   allergiesMentioned: [],
-  assessmentNotes: 'Likely viral upper respiratory tract infection. No signs of pneumonia. Needs clinician review.',
-  patientInstructions: 'Continue paracetamol, increase fluid intake, return if breathing worsens or fever exceeds 38.5C.',
+  assessmentNotes:
+    'Likely viral upper respiratory tract infection. No signs of pneumonia. Needs clinician review.',
+  patientInstructions:
+    'Continue paracetamol, increase fluid intake, return if breathing worsens or fever exceeds 38.5C.',
 };
 
 const initialStepStatus: Record<FlowStep, StepStatus> = {
@@ -178,11 +192,21 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
           )}
         </p>
         <div className={styles.pipelinePreview}>
-          <Tag type="blue" size="sm">{t('livekitAudio', 'LiveKit audio')}</Tag>
-          <Tag type="purple" size="sm">{t('localStt', 'Local STT')}</Tag>
-          <Tag type="cyan" size="sm">{t('clinicalTranslation', 'Clinical translation')}</Tag>
-          <Tag type="green" size="sm">{t('localTts', 'Local TTS')}</Tag>
-          <Tag type="gray" size="sm">{t('openmrsDraft', 'OpenMRS draft')}</Tag>
+          <Tag type="blue" size="sm">
+            {t('livekitAudio', 'LiveKit audio')}
+          </Tag>
+          <Tag type="purple" size="sm">
+            {t('localStt', 'Local STT')}
+          </Tag>
+          <Tag type="cyan" size="sm">
+            {t('clinicalTranslation', 'Clinical translation')}
+          </Tag>
+          <Tag type="green" size="sm">
+            {t('localTts', 'Local TTS')}
+          </Tag>
+          <Tag type="gray" size="sm">
+            {t('openmrsDraft', 'OpenMRS draft')}
+          </Tag>
         </div>
         <dl className={styles.connectionDetails}>
           <div>
@@ -201,9 +225,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
         <PatientContext />
         {error && <p className={styles.error}>{error}</p>}
         <Button kind="primary" renderIcon={Microphone} onClick={connect} disabled={connecting}>
-          {connecting
-            ? t('connecting', 'Connecting...')
-            : t('startConsultation', 'Start consultation')}
+          {connecting ? t('connecting', 'Connecting...') : t('startConsultation', 'Start consultation')}
         </Button>
       </Tile>
     );
@@ -230,6 +252,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
     >
       <RoomAudioRenderer />
       <ActiveSession
+        patientUuid={patient?.id ?? ''}
         patientName={patient?.name?.[0]?.text ?? ''}
         roomName={roomName}
         onEnd={disconnect}
@@ -245,6 +268,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
 /* ------------------------------------------------------------------ */
 
 interface ActiveSessionProps {
+  patientUuid: string;
   patientName: string;
   roomName: string;
   onEnd: () => void;
@@ -253,6 +277,7 @@ interface ActiveSessionProps {
 }
 
 const ActiveSession: React.FC<ActiveSessionProps> = ({
+  patientUuid,
   patientName,
   roomName,
   onEnd,
@@ -272,10 +297,18 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const [redactedTranscript, setRedactedTranscript] = useState('');
   const [draft, setDraft] = useState<EncounterDraft | null>(null);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftSaveMessage, setDraftSaveMessage] = useState<string | null>(null);
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [health, setHealth] = useState<ServiceHealth>(initialHealth);
   const timeouts = useRef<number[]>([]);
-  const { transcripts: agentTranscripts, agentDraft, agentStatus, agentError, clearTranscripts } =
-    useAgentData();
+  const {
+    transcripts: agentTranscripts,
+    agentDraft,
+    agentStatus,
+    agentError,
+    clearTranscripts,
+  } = useAgentData();
 
   useEffect(() => {
     const interval = setInterval(() => setElapsed((e) => e + 1), 1000);
@@ -299,9 +332,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           setMicError(null);
         })
         .catch((err) => {
-          setMicError(
-            err?.message || 'Microphone access denied. HTTPS or localhost required for Safari.',
-          );
+          setMicError(err?.message || 'Microphone access denied. HTTPS or localhost required for Safari.');
         });
     }
   }, [connectionState, localParticipant]);
@@ -321,7 +352,10 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const liveTranscriptText = useMemo(() => {
     if (agentTranscripts.length === 0) return '';
     return agentTranscripts
-      .map((t) => `${t.role === 'doctor' ? 'Doctor' : 'Patient'} (${t.language.toUpperCase()}): ${t.redacted || t.text}`)
+      .map(
+        (t) =>
+          `${t.role === 'doctor' ? 'Doctor' : 'Patient'} (${t.language.toUpperCase()}): ${t.redacted || t.text}`,
+      )
       .join('\n\n');
   }, [agentTranscripts]);
 
@@ -362,6 +396,8 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     setRedactedTranscript('');
     setDraft(null);
     setDraftSaved(false);
+    setDraftSaveMessage(null);
+    setDraftSaveError(null);
     setStepStatus(initialStepStatus);
 
     await runStep('doctorStt', 1200);
@@ -382,13 +418,34 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     setRedactedTranscript('');
     setDraft(null);
     setDraftSaved(false);
+    setDraftSaving(false);
+    setDraftSaveMessage(null);
+    setDraftSaveError(null);
     setDemoRunning(false);
     clearTranscripts();
   }, [clearTranscripts]);
 
-  const saveDraft = useCallback(() => {
-    setDraftSaved(true);
-  }, []);
+  const saveDraft = useCallback(async () => {
+    if (!draft || !patientUuid || draftSaving) return;
+
+    setDraftSaving(true);
+    setDraftSaveError(null);
+    setDraftSaveMessage(null);
+    try {
+      const result = await saveOpenmrsDraft(tokenEndpoint, {
+        patientUuid,
+        draft,
+        redactedTranscript: redactedTranscript || liveTranscriptText,
+        writeToOpenmrs: true,
+      });
+      setDraftSaved(true);
+      setDraftSaveMessage(result.message || t('queuedForReview', 'Queued for clinician review'));
+    } catch (err) {
+      setDraftSaveError(err instanceof Error ? err.message : t('failedToSaveDraft', 'Failed to save draft'));
+    } finally {
+      setDraftSaving(false);
+    }
+  }, [draft, draftSaving, liveTranscriptText, patientUuid, redactedTranscript, t, tokenEndpoint]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -420,7 +477,10 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     {
       step: 'doctorTranslation',
       title: t('translateForPatient', 'Translate for patient'),
-      detail: t('translateForPatientDetail', 'Redact identifiers and translate clinical meaning to the patient language.'),
+      detail: t(
+        'translateForPatientDetail',
+        'Redact identifiers and translate clinical meaning to the patient language.',
+      ),
     },
     {
       step: 'patientTts',
@@ -454,12 +514,15 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
         </div>
         <div className={styles.headerRight}>
           <span className={styles.timer}>{formatTime(elapsed)}</span>
-          <Tag type={stateKind} size="sm">{stateLabel}</Tag>
+          <Tag type={stateKind} size="sm">
+            {stateLabel}
+          </Tag>
         </div>
       </div>
 
       {micError && <p className={styles.error}>{micError}</p>}
       {agentError && <p className={styles.error}>{agentError}</p>}
+      {draftSaveError && <p className={styles.error}>{draftSaveError}</p>}
 
       {/* ---- Audio visualizer ---- */}
       {!muted && <AudioVisualizer width={280} height={40} barCount={32} className={styles.visualizer} />}
@@ -482,9 +545,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           onClick={runDemoConversation}
           disabled={demoRunning}
         >
-          {demoRunning
-            ? t('demoRunning', 'Running demo...')
-            : t('runDemo', 'Run demo conversation')}
+          {demoRunning ? t('demoRunning', 'Running demo...') : t('runDemo', 'Run demo conversation')}
         </Button>
         <Button
           kind="danger--ghost"
@@ -557,11 +618,18 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                 {t('queuedForReview', 'Queued for clinician review')}
               </Tag>
             ) : (
-              <Button kind="primary" size="sm" renderIcon={Save} onClick={saveDraft}>
-                {t('saveDraft', 'Save draft to OpenMRS')}
+              <Button
+                kind="primary"
+                size="sm"
+                renderIcon={Save}
+                onClick={saveDraft}
+                disabled={draftSaving || !patientUuid}
+              >
+                {draftSaving ? t('savingDraft', 'Saving draft...') : t('saveDraft', 'Save draft to OpenMRS')}
               </Button>
             )}
           </div>
+          {draftSaveMessage && <p className={styles.agentStatus}>{draftSaveMessage}</p>}
           <div className={styles.draftGrid}>
             <TextInput
               id="chief-complaint"
@@ -641,10 +709,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                   icon={Security}
                   text={t('clinicianReviewRequired', 'Clinician review required')}
                 />
-                <PrivacyItem
-                  icon={Security}
-                  text={t('offlineCapable', 'Offline-capable architecture')}
-                />
+                <PrivacyItem icon={Security} text={t('offlineCapable', 'Offline-capable architecture')} />
               </ul>
             </div>
             <div className={styles.healthPanel}>
@@ -720,10 +785,7 @@ const LanguageToggle: React.FC<LanguageToggleProps> = ({ label, value, onChange 
   );
 };
 
-const PrivacyItem: React.FC<{ icon: React.ComponentType; text: string }> = ({
-  icon: Icon,
-  text,
-}) => (
+const PrivacyItem: React.FC<{ icon: React.ComponentType; text: string }> = ({ icon: Icon, text }) => (
   <li className={styles.privacyItem}>
     <Icon />
     <span>{text}</span>
@@ -768,26 +830,72 @@ async function checkHealth(
   tokenEndpoint: string,
   setHealth: React.Dispatch<React.SetStateAction<ServiceHealth>>,
 ) {
-  setHealth((h) => ({ ...h, livekit: 'checking', tokenServer: 'checking', openmrs: 'checking' }));
+  setHealth({
+    livekit: 'checking',
+    tokenServer: 'checking',
+    openmrs: 'checking',
+    stt: 'checking',
+    tts: 'checking',
+    llm: 'checking',
+  });
 
   const httpLivekit = livekitUrl.replace(/^ws/, 'http');
+
+  try {
+    const res = await fetch(resolveTokenServerPath(tokenEndpoint, '/health'), {
+      method: 'GET',
+      credentials: 'include',
+      signal: AbortSignal.timeout(5000),
+    });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !payload?.services) {
+      throw new Error('Token server health response was not available');
+    }
+
+    setHealth({
+      livekit: serviceHealthToStatus(payload.services.livekit?.status),
+      tokenServer: serviceHealthToStatus(payload.services.tokenServer?.status),
+      openmrs: serviceHealthToStatus(payload.services.openmrs?.status),
+      stt: serviceHealthToStatus(payload.services.stt?.status),
+      tts: serviceHealthToStatus(payload.services.tts?.status),
+      llm: serviceHealthToStatus(payload.services.ollama?.status),
+    });
+    return;
+  } catch {
+    setHealth((h) => ({
+      ...h,
+      tokenServer: 'error',
+      stt: 'pending',
+      tts: 'pending',
+      llm: 'pending',
+    }));
+  }
+
   const checks: Array<{ key: keyof ServiceHealth; url: string }> = [
     { key: 'livekit', url: httpLivekit },
-    { key: 'tokenServer', url: tokenEndpoint.replace(/\/token$/, '/health') },
     { key: 'openmrs', url: '/openmrs/ws/fhir2/R4/metadata' },
   ];
 
-  for (const { key, url } of checks) {
-    try {
-      const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(5000) });
-      setHealth((h) => ({ ...h, [key]: res.ok ? 'ok' : 'error' }));
-    } catch {
-      setHealth((h) => ({ ...h, [key]: 'error' }));
-    }
-  }
+  await Promise.all(
+    checks.map(async ({ key, url }) => {
+      try {
+        const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(5000) });
+        setHealth((h) => ({ ...h, [key]: res.ok ? 'ok' : 'error' }));
+      } catch {
+        setHealth((h) => ({ ...h, [key]: 'error' }));
+      }
+    }),
+  );
+}
 
-  // STT, TTS, LLM don't have direct HTTP endpoints from the browser
-  setHealth((h) => ({ ...h, stt: 'pending', tts: 'pending', llm: 'pending' }));
+function serviceHealthToStatus(status: unknown): ServiceStatus {
+  if (status === 'ok' || status === 'configured') {
+    return 'ok';
+  }
+  if (status === 'unreachable' || status === 'error') {
+    return 'error';
+  }
+  return 'pending';
 }
 
 export default VoicePanel;

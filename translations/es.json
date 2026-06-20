@@ -60,6 +60,8 @@
   "redactedTranscript": "Transcripción anonimizada",
   "encounterDraft": "Borrador de encuentro",
   "saveDraft": "Guardar borrador en OpenMRS",
+  "savingDraft": "Guardando borrador...",
+  "failedToSaveDraft": "No se pudo guardar el borrador",
   "queuedForReview": "En cola para revisión clínica",
   "chiefComplaint": "Motivo de consulta",
   "symptoms": "Síntomas",

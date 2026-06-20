@@ -21,7 +21,11 @@ const PatientContext: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!patient?.id) return;
+    if (!patient?.id) {
+      setSummary(null);
+      setLoading(false);
+      return;
+    }
 
     let cancelled = false;
     setLoading(true);
@@ -30,22 +34,29 @@ const PatientContext: React.FC = () => {
       fetchFhirList(`/ws/fhir2/R4/Condition?patient=${patient.id}&_count=20`),
       fetchFhirList(`/ws/fhir2/R4/AllergyIntolerance?patient=${patient.id}&_count=20`),
       fetchFhirList(`/ws/fhir2/R4/MedicationRequest?patient=${patient.id}&status=active&_count=20`),
-    ]).then(([conditions, allergies, medications]) => {
-      if (cancelled) return;
-      setSummary({
-        conditions: conditions.map(extractConditionDisplay),
-        allergies: allergies.map(extractAllergyDisplay),
-        medications: medications.map(extractMedicationDisplay),
+    ])
+      .then(([conditions, allergies, medications]) => {
+        if (cancelled) return;
+        setSummary({
+          conditions: conditions.map(extractConditionDisplay),
+          allergies: allergies.map(extractAllergyDisplay),
+          medications: medications.map(extractMedicationDisplay),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSummary({ conditions: [], allergies: [], medications: [] });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
       });
-      setLoading(false);
-    }).catch(() => {
-      if (!cancelled) {
-        setSummary({ conditions: [], allergies: [], medications: [] });
-        setLoading(false);
-      }
-    });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [patient?.id]);
 
   if (loading) {
@@ -60,9 +71,7 @@ const PatientContext: React.FC = () => {
   if (!summary) return null;
 
   const isEmpty =
-    summary.conditions.length === 0 &&
-    summary.allergies.length === 0 &&
-    summary.medications.length === 0;
+    summary.conditions.length === 0 && summary.allergies.length === 0 && summary.medications.length === 0;
 
   return (
     <div className={styles.context}>
@@ -113,7 +122,9 @@ const ContextGroup: React.FC<{
           </Tag>
         ))
       ) : (
-        <Tag type="gray" size="sm">{emptyLabel}</Tag>
+        <Tag type="gray" size="sm">
+          {emptyLabel}
+        </Tag>
       )}
     </div>
   </div>
@@ -143,10 +154,12 @@ function extractAllergyDisplay(entry: FhirEntry): string {
 
 function extractMedicationDisplay(entry: FhirEntry): string {
   const r = entry.resource as Record<string, unknown>;
-  const medCode = r.medicationCodeableConcept as {
-    coding?: Array<{ display?: string }>;
-    text?: string;
-  } | undefined;
+  const medCode = r.medicationCodeableConcept as
+    | {
+        coding?: Array<{ display?: string }>;
+        text?: string;
+      }
+    | undefined;
   return medCode?.text || medCode?.coding?.[0]?.display || 'Unknown medication';
 }
 

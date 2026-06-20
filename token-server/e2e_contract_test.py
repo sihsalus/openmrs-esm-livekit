@@ -292,6 +292,22 @@ class TokenServerE2ETest(unittest.TestCase):
             self.assertEqual(response.headers["Access-Control-Allow-Origin"], "http://openmrs.test")
             self.assertEqual(response.headers["Access-Control-Allow-Credentials"], "true")
 
+    def test_token_rejects_invalid_json(self):
+        request = urllib.request.Request(
+            f"{self.base_url}/token",
+            data=b"{not-json",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            urllib.request.urlopen(request, timeout=10)
+
+        self.assertEqual(context.exception.code, 400)
+        payload = json.loads(context.exception.read().decode("utf-8"))
+        self.assertEqual(payload["status"], "error")
+        self.assertIn("valid JSON", payload["error"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

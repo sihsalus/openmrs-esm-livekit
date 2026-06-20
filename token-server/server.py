@@ -97,11 +97,16 @@ class TokenHandler(BaseHTTPRequestHandler):
             self._send_json({"status": "error", "error": str(error)}, status=500)
 
     def _handle_token(self):
-        body = self._read_json()
+        try:
+            body = self._read_json()
+        except ValueError as error:
+            self._send_json({"status": "error", "error": str(error)}, status=400)
+            return
 
         patient_uuid = sanitize_room_part(body.get("patientUuid", "unknown"))
-        room_prefix = body.get("roomPrefix") or ROOM_PREFIX
+        room_prefix = sanitize_room_prefix(body.get("roomPrefix") or ROOM_PREFIX)
         room_name = body.get("roomName") or f"{room_prefix}{patient_uuid}"
+        room_name = sanitize_room_part(room_name)
         if not room_name.startswith(room_prefix):
             room_name = f"{room_prefix}{sanitize_room_part(room_name)}"
         identity = f"clinician-{int(time.time())}"
@@ -116,7 +121,10 @@ class TokenHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         if not length:
             return {}
-        return json.loads(self.rfile.read(length))
+        try:
+            return json.loads(self.rfile.read(length))
+        except json.JSONDecodeError as error:
+            raise ValueError("Request body must be valid JSON") from error
 
     def _request_context(self):
         return {
@@ -150,6 +158,11 @@ class TokenHandler(BaseHTTPRequestHandler):
 
 def sanitize_room_part(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in str(value))
+
+
+def sanitize_room_prefix(value: str) -> str:
+    prefix = sanitize_room_part(value)
+    return prefix or ROOM_PREFIX
 
 
 if __name__ == "__main__":

@@ -60,6 +60,8 @@
   "redactedTranscript": "Redacted transcript",
   "encounterDraft": "Encounter draft",
   "saveDraft": "Save draft to OpenMRS",
+  "savingDraft": "Saving draft...",
+  "failedToSaveDraft": "Failed to save draft",
   "queuedForReview": "Queued for clinician review",
   "chiefComplaint": "Chief complaint",
   "symptoms": "Symptoms",

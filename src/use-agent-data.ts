@@ -24,6 +24,8 @@ export interface AgentMessage {
   payload: unknown;
 }
 
+const maxTranscripts = 100;
+
 export function useAgentData() {
   const room = useRoomContext();
   const [transcripts, setTranscripts] = useState<AgentTranscript[]>([]);
@@ -34,44 +36,49 @@ export function useAgentData() {
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+    };
   }, []);
 
-  const handleData = useCallback(
-    (payload: Uint8Array, participant: unknown, kind: DataPacket_Kind) => {
-      if (!mounted.current) return;
-      try {
-        const text = new TextDecoder().decode(payload);
-        const msg: AgentMessage = JSON.parse(text);
+  const handleData = useCallback((payload: Uint8Array, participant: unknown, kind: DataPacket_Kind) => {
+    if (!mounted.current) return;
+    try {
+      const text = new TextDecoder().decode(payload);
+      const msg: AgentMessage = JSON.parse(text);
 
-        switch (msg.type) {
-          case 'transcript':
-          case 'translation': {
-            const t = msg.payload as AgentTranscript;
-            setTranscripts((prev) => [...prev, { ...t, timestamp: Date.now() }]);
-            break;
+      switch (msg.type) {
+        case 'transcript':
+        case 'translation': {
+          if (!isAgentTranscript(msg.payload)) {
+            return;
           }
-          case 'draft': {
-            setAgentDraft(msg.payload as AgentDraft);
-            break;
-          }
-          case 'status': {
-            const s = msg.payload as { step?: string; message?: string };
-            setAgentStatus(s.message || s.step || '');
-            break;
-          }
-          case 'error': {
-            const e = msg.payload as { message?: string };
-            setAgentError(e.message || 'Agent error');
-            break;
-          }
+          const transcript = msg.payload;
+          const timestamp = Number.isFinite(transcript.timestamp) ? transcript.timestamp : Date.now();
+          setTranscripts((prev) => [...prev.slice(-(maxTranscripts - 1)), { ...transcript, timestamp }]);
+          break;
         }
-      } catch {
-        // not JSON — ignore non-structured data
+        case 'draft': {
+          if (isAgentDraft(msg.payload)) {
+            setAgentDraft(msg.payload);
+          }
+          break;
+        }
+        case 'status': {
+          const s = isRecord(msg.payload) ? msg.payload : {};
+          setAgentStatus(s.message || s.step || '');
+          break;
+        }
+        case 'error': {
+          const e = isRecord(msg.payload) ? msg.payload : {};
+          setAgentError(e.message || 'Agent error');
+          break;
+        }
       }
-    },
-    [],
-  );
+    } catch {
+      // not JSON — ignore non-structured data
+    }
+  }, []);
 
   useEffect(() => {
     if (!room) return;
@@ -95,4 +102,36 @@ export function useAgentData() {
     agentError,
     clearTranscripts,
   };
+}
+
+function isAgentTranscript(payload: unknown): payload is AgentTranscript {
+  if (!isRecord(payload)) {
+    return false;
+  }
+
+  return (
+    (payload.role === 'doctor' || payload.role === 'patient') &&
+    typeof payload.language === 'string' &&
+    typeof payload.text === 'string' &&
+    (payload.redacted === undefined || typeof payload.redacted === 'string')
+  );
+}
+
+function isAgentDraft(payload: unknown): payload is AgentDraft {
+  if (!isRecord(payload)) {
+    return false;
+  }
+
+  return (
+    typeof payload.chiefComplaint === 'string' &&
+    Array.isArray(payload.symptoms) &&
+    Array.isArray(payload.medicationsMentioned) &&
+    Array.isArray(payload.allergiesMentioned) &&
+    typeof payload.assessmentNotes === 'string' &&
+    typeof payload.patientInstructions === 'string'
+  );
+}
+
+function isRecord(payload: unknown): payload is Record<string, any> {
+  return typeof payload === 'object' && payload !== null;
 }
