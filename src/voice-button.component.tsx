@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Button } from '@carbon/react';
+import { Button, Tile } from '@carbon/react';
 import { Microphone } from '@carbon/icons-react';
 import { useTranslation } from 'react-i18next';
 import { launchWorkspace } from '@openmrs/esm-framework';
@@ -17,15 +17,19 @@ const VoiceButton: React.FC = () => {
   }, [active]);
 
   return (
-    <Button
-      kind={active ? 'danger' : 'ghost'}
-      size="sm"
-      hasIconOnly
-      renderIcon={Microphone}
-      tooltipPosition="bottom"
-      iconDescription={t('voiceConsultation', 'Voice consultation')}
-      onClick={handleClick}
-    />
+    <Tile>
+      <div style={{ display: 'grid', gap: '0.75rem' }}>
+        <div>
+          <h4 style={{ margin: 0 }}>{t('voiceConsultation', 'Voice consultation')}</h4>
+          <p style={{ color: 'var(--cds-text-secondary)', margin: '0.25rem 0 0' }}>
+            {t('voiceConsultationDescription', 'Start a LiveKit audio room for this patient.')}
+          </p>
+        </div>
+        <Button kind={active ? 'danger' : 'primary'} size="sm" renderIcon={Microphone} onClick={handleClick}>
+          {active ? t('consultationOpen', 'Consultation open') : t('startConsultation', 'Start consultation')}
+        </Button>
+      </div>
+    </Tile>
   );
 };
 

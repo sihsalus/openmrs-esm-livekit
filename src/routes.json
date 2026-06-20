@@ -8,7 +8,11 @@
     {
       "name": "livekit-voice-button",
       "component": "livekitVoiceButton",
-      "slot": "patient-actions-slot"
+      "slot": "patient-chart-summary-dashboard-slot",
+      "order": 0,
+      "meta": {
+        "fullWidth": false
+      }
     },
     {
       "name": "livekit-voice-panel",

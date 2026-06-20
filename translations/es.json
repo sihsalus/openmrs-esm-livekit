@@ -14,5 +14,7 @@
   "missingPatient": "No hay contexto de paciente disponible para esta consulta por voz.",
   "roomPrefix": "Prefijo de sala",
   "tokenServer": "Servidor de tokens",
-  "tokenServerHint": "Verifica que el token server este corriendo y que el gateway CSP permita este endpoint."
+  "tokenServerHint": "Verifica que el token server este corriendo y que el gateway CSP permita este endpoint.",
+  "voiceConsultationDescription": "Inicia una sala de audio LiveKit para este paciente.",
+  "consultationOpen": "Consulta abierta"
 }

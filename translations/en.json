@@ -14,5 +14,7 @@
   "missingPatient": "No patient context is available for this voice consultation.",
   "roomPrefix": "Room prefix",
   "tokenServer": "Token server",
-  "tokenServerHint": "Check that the token server is running and that gateway CSP allows this endpoint."
+  "tokenServerHint": "Check that the token server is running and that gateway CSP allows this endpoint.",
+  "voiceConsultationDescription": "Start a LiveKit audio room for this patient.",
+  "consultationOpen": "Consultation open"
 }
