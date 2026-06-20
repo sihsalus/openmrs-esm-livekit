@@ -1,5 +1,9 @@
 @use '@carbon/layout';
 
+.modalContent {
+  min-width: min(42rem, 100%);
+}
+
 .panel {
   padding: layout.$spacing-05;
   display: flex;

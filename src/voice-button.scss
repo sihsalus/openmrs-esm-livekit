@@ -1,0 +1,14 @@
+@use '@carbon/layout';
+
+.actionButton {
+  justify-content: flex-start;
+  min-height: 2.5rem;
+  min-width: 12rem;
+  width: 100%;
+}
+
+.actionButton :global(.cds--btn__icon),
+.actionButton :global(.bx--btn__icon) {
+  flex-shrink: 0;
+  margin-left: auto;
+}

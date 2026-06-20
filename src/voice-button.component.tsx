@@ -1,24 +1,33 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Button } from '@carbon/react';
 import { Microphone } from '@carbon/icons-react';
 import { useTranslation } from 'react-i18next';
-import { launchWorkspace } from '@openmrs/esm-framework';
+import { showModal } from '@openmrs/esm-framework';
+import styles from './voice-button.scss';
 
 const VoiceButton: React.FC = () => {
   const { t } = useTranslation();
   const [active, setActive] = useState(false);
+  const closeModalRef = useRef<(() => void) | null>(null);
 
   const handleClick = useCallback(() => {
-    if (active) return;
+    closeModalRef.current?.();
     setActive(true);
-    launchWorkspace('livekit-voice-panel', {
-      onClose: () => setActive(false),
+    closeModalRef.current = showModal('livekit-voice-modal', { size: 'lg' }, () => {
+      closeModalRef.current = null;
+      setActive(false);
     });
-  }, [active]);
+  }, []);
 
   return (
-    <Button kind={active ? 'danger--ghost' : 'ghost'} size="sm" renderIcon={Microphone} onClick={handleClick}>
-      {active ? t('consultationOpen', 'Consultation open') : t('voiceConsultation', 'Voice consultation')}
+    <Button
+      className={styles.actionButton}
+      kind={active ? 'tertiary' : 'ghost'}
+      size="md"
+      renderIcon={Microphone}
+      onClick={handleClick}
+    >
+      {t('voiceConsultation', 'Voice consultation')}
     </Button>
   );
 };

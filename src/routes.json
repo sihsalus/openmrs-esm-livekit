@@ -12,16 +12,15 @@
       "order": 50,
       "online": true,
       "offline": false
-    },
+    }
+  ],
+  "modals": [
     {
-      "name": "livekit-voice-panel",
-      "component": "livekitVoicePanel",
-      "slot": "patient-chart-workspace-slot",
+      "name": "livekit-voice-modal",
+      "component": "livekitVoiceModal",
       "meta": {
         "title": "Voice Consultation"
-      },
-      "online": true,
-      "offline": false
+      }
     }
   ],
   "pages": []
