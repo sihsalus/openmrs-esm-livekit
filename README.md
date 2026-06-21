@@ -1,0 +1,103 @@
+# OpenMRS LiveKit Voice Assistant
+
+OpenMRS LiveKit is a local-first clinical voice assistant for OpenMRS O3. It opens a LiveKit audio room from the patient chart, runs a doctor-patient voice workflow, redacts PHI-like text, and produces a structured OpenMRS encounter draft for clinician review.
+
+The project is designed for clinics where internet connectivity is unreliable, privacy matters, and clinicians may need bilingual support during patient encounters.
+
+## What it does
+
+- Starts a patient-scoped LiveKit audio room from an OpenMRS O3 frontend extension.
+- Supports a local AI workflow for speech-to-text, clinical translation, text-to-speech, and encounter drafting.
+- Generates a redacted transcript and a structured draft with chief complaint, symptoms, medications, allergies, assessment notes, and patient instructions.
+- Queues drafts for clinician review instead of writing autonomous documentation directly to the chart.
+- Avoids storing raw audio by default.
+- Includes deterministic synthetic consultation data for demos and end-to-end checks without real patient data.
+
+## Architecture
+
+The prototype has two parts:
+
+- `src/`: OpenMRS O3 microfrontend that renders the voice button, modal, patient context, LiveKit room, local AI workflow, privacy status, and draft review UI.
+- `token-server/`: local helper service that issues LiveKit tokens and exposes demo-ready AI endpoints for health checks, translation, STT/TTS contracts, PHI redaction, synthetic consultations, and OpenMRS draft queueing.
+
+Typical local flow:
+
+```text
+OpenMRS O3 patient chart
+  -> LiveKit room
+  -> local helper service
+  -> local AI / Ollama-compatible drafting
+  -> redacted encounter draft
+  -> clinician review queue
+```
+
+## Clinical safety model
+
+The generated draft is not an autonomous diagnosis and is not written directly to the medical record by default. The helper queues the draft locally and returns an OpenMRS encounter payload preview. A real OpenMRS write requires explicit configuration and a write request.
+
+Privacy defaults:
+
+- Raw audio is not stored by default.
+- PHI-like identifiers are redacted from generated text.
+- Local-only processing is supported for offline-capable deployments.
+- Clinician review is required before final charting.
+
+## Getting started
+
+Install frontend dependencies:
+
+```bash
+yarn install
+```
+
+Run the OpenMRS frontend:
+
+```bash
+yarn start
+```
+
+Install and run the local helper:
+
+```bash
+python3 -m venv token-server/.venv
+token-server/.venv/bin/pip install -r token-server/requirements.txt
+LIVEKIT_API_KEY=<key> LIVEKIT_API_SECRET=<secret> token-server/.venv/bin/python token-server/server.py
+```
+
+The helper listens on port `7890` by default. The frontend derives these defaults when config is left blank:
+
+- LiveKit WebSocket: `ws(s)://<current-browser-host>:7880`
+- Token endpoint: `http(s)://<current-browser-host>:7890/token`
+- Room prefix: `iot-device-`
+
+## Configuration
+
+The OpenMRS module config schema exposes:
+
+- `livekitServerUrl`: LiveKit WebSocket URL.
+- `tokenEndpoint`: helper endpoint used to request LiveKit room tokens.
+- `roomPrefix`: LiveKit room prefix joined by the local agent.
+
+The helper supports optional OpenMRS draft write configuration. See [token-server/README.md](token-server/README.md) for endpoint contracts, OpenMRS write safeguards, and environment variables.
+
+## Tests
+
+Run the frontend test suite:
+
+```bash
+yarn test
+```
+
+Run the helper contract tests:
+
+```bash
+yarn test:e2e:token-server
+```
+
+The helper e2e test starts fake local OpenMRS, Ollama, and LiveKit services, then validates health checks, PHI redaction, synthetic data generation, recording consent, CORS, and an authenticated OpenMRS encounter write against the fake REST API.
+
+## Hackathon demo
+
+For the OpenMRS AI Hackathon demo, the project shows OpenMRS, LiveKit, and local AI services running locally. It generates a synthetic bilingual consultation, redacts patient identifiers, and produces a reviewable OpenMRS encounter draft.
+
+The submission focus is the Clinical Track: point-of-care voice support, offline-capable AI, translation, and clinician-reviewed documentation assistance.

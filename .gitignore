@@ -11,3 +11,9 @@ __pycache__/
 *.pyc
 .env
 .npmrc
+video-assets/*.mp4
+video-assets/*.webm
+video-assets/*.tar.gz
+video-assets/concat-list.txt
+video-assets/playwright-output/
+video-assets/playwright-recording/
