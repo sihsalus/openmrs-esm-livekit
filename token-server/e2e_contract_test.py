@@ -156,6 +156,8 @@ class TokenServerE2ETest(unittest.TestCase):
         env.update(
             {
                 "TOKEN_SERVER_PORT": str(cls.port),
+                "LIVEKIT_API_KEY": "test-key",
+                "LIVEKIT_API_SECRET": "test-secret",
                 "OLLAMA_URL": cls.ollama_url,
                 "OLLAMA_MODEL": "medgemma:test",
                 "OPENMRS_BASE_URL": f"{cls.openmrs_url}/openmrs",
@@ -207,6 +209,7 @@ class TokenServerE2ETest(unittest.TestCase):
     def test_health_reports_local_services_and_contracts(self):
         payload, _response = request_json(self.base_url, "/health")
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["services"]["livekitTokenSigning"]["status"], "configured")
         self.assertEqual(payload["services"]["openmrsDraftWrite"]["status"], "configured")
         self.assertIn("pediatric-respiratory", payload["services"]["syntheticData"]["cases"])
         self.assertEqual(payload["services"]["recording"]["status"], "manifest_only")

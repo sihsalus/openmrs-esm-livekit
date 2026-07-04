@@ -28,10 +28,23 @@ Returns local service status for the frontend status panel.
 ```
 
 Detailed service status is available under `services`, including `services.openmrsDraftWrite` for OpenMRS REST write readiness.
+`services.livekitTokenSigning` reports whether `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` are configured.
 
 ### POST /token
 
 Existing LiveKit token endpoint.
+
+For shared demos, staging, or production, configure LiveKit signing credentials explicitly:
+
+```bash
+LIVEKIT_API_KEY=<livekit-api-key>
+LIVEKIT_API_SECRET=<livekit-api-secret>
+```
+
+If both variables are missing, the helper falls back to LiveKit development defaults
+`devkey` / `secret`, which are only appropriate for a local `livekit-server --dev`
+environment. `/health` will report this as `services.livekitTokenSigning.status:
+"dev_default"`.
 
 ```json
 {

@@ -353,11 +353,13 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     if (agentTranscripts.length === 0) return '';
     return agentTranscripts
       .map(
-        (t) =>
-          `${t.role === 'doctor' ? 'Doctor' : 'Patient'} (${t.language.toUpperCase()}): ${t.redacted || t.text}`,
+        (transcript) =>
+          `${transcriptRoleLabel(transcript.role, t)} (${transcript.language.toUpperCase()}): ${
+            transcript.redacted || transcript.text
+          }`,
       )
       .join('\n\n');
-  }, [agentTranscripts]);
+  }, [agentTranscripts, t]);
 
   const toggleMute = useCallback(async () => {
     if (localParticipant) {
@@ -823,6 +825,16 @@ const HealthRow: React.FC<{ label: string; status: ServiceStatus }> = ({ label, 
 
 function languageLabel(language: LanguageCode, t: ReturnType<typeof useTranslation>['t']) {
   return language === 'en' ? t('english', 'English') : t('spanish', 'Spanish');
+}
+
+function transcriptRoleLabel(role: 'doctor' | 'patient' | 'assistant', t: ReturnType<typeof useTranslation>['t']) {
+  if (role === 'doctor') {
+    return t('doctor', 'Doctor');
+  }
+  if (role === 'patient') {
+    return t('patient', 'Patient');
+  }
+  return t('assistant', 'Assistant');
 }
 
 async function checkHealth(

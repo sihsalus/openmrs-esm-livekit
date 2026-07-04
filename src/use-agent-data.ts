@@ -3,7 +3,7 @@ import { useRoomContext } from '@livekit/components-react';
 import { DataPacket_Kind, RoomEvent } from 'livekit-client';
 
 export interface AgentTranscript {
-  role: 'doctor' | 'patient';
+  role: 'doctor' | 'patient' | 'assistant';
   language: string;
   text: string;
   redacted?: string;
@@ -110,7 +110,7 @@ function isAgentTranscript(payload: unknown): payload is AgentTranscript {
   }
 
   return (
-    (payload.role === 'doctor' || payload.role === 'patient') &&
+    (payload.role === 'doctor' || payload.role === 'patient' || payload.role === 'assistant') &&
     typeof payload.language === 'string' &&
     typeof payload.text === 'string' &&
     (payload.redacted === undefined || typeof payload.redacted === 'string')
