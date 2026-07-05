@@ -45,6 +45,26 @@ and update the OpenMRS importmap as a temporary hotfix instead of relying on the
 assembly version. Keep this as a short-lived demo workaround; the reproducible
 path is still the npm package version above.
 
+If the package has been published but a full OpenMRS frontend rebuild fails on
+unrelated `@openmrs/*` registry timeouts, deploy the published npm tarball as the
+temporary importmap hotfix instead of using a local build:
+
+```bash
+npm pack @sihsalus/esm-livekit-app@0.1.9
+tar -xzf sihsalus-esm-livekit-app-0.1.9.tgz
+```
+
+Copy `package/dist/*` into the frontend nginx document root under
+`sihsalus-esm-livekit-app-0.1.9/`, then point `importmap.json` at:
+
+```text
+./sihsalus-esm-livekit-app-0.1.9/openmrs-esm-livekit-app.js
+```
+
+Keep `frontend/spa-assemble-config.json` on the same published version so the
+next successful full frontend rebuild converges back to the normal assembly
+path.
+
 Optional CPU-only AI settings:
 
 ```bash
