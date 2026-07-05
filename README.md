@@ -70,6 +70,19 @@ The helper listens on port `7890` by default. The frontend derives these default
 - Token endpoint: `http(s)://<current-browser-host>:7890/token`
 - Room prefix: `iot-device-`
 
+For any shared demo, staging, or production deployment, enable the helper
+readiness gate and configure browser origins explicitly:
+
+```bash
+TOKEN_SERVER_ENV=production
+TOKEN_SERVER_ALLOWED_ORIGINS=https://openmrs.example.org
+LIVEKIT_API_KEY=<site-livekit-api-key>
+LIVEKIT_API_SECRET=<site-livekit-api-secret>
+```
+
+Production mode fails fast if LiveKit signing credentials or the CORS allowlist
+are missing.
+
 ## Configuration
 
 The OpenMRS module config schema exposes:

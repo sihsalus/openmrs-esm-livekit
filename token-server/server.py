@@ -14,6 +14,7 @@ import json
 import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
 
 try:
     import jwt
@@ -32,6 +33,31 @@ from local_ai import (
 
 DEFAULT_DEV_API_KEY = "devkey"
 DEFAULT_DEV_API_SECRET = "secret"
+PRODUCTION_ENVIRONMENTS = {"production", "prod", "staging", "shared"}
+LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "::1", "[::1]"}
+
+
+def env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def parse_allowed_origins(value: str) -> set[str]:
+    origins: set[str] = set()
+    for item in value.split(","):
+        origin = normalize_origin(item.strip())
+        if origin:
+            origins.add(origin)
+    return origins
+
+
+def normalize_origin(origin: str) -> str:
+    if not origin:
+        return ""
+    parsed = urlparse(origin)
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
 
 LIVEKIT_API_KEY_CONFIGURED = bool(os.environ.get("LIVEKIT_API_KEY"))
 LIVEKIT_API_SECRET_CONFIGURED = bool(os.environ.get("LIVEKIT_API_SECRET"))
@@ -39,6 +65,13 @@ API_KEY = os.environ.get("LIVEKIT_API_KEY", DEFAULT_DEV_API_KEY)
 API_SECRET = os.environ.get("LIVEKIT_API_SECRET", DEFAULT_DEV_API_SECRET)
 PORT = int(os.environ.get("TOKEN_SERVER_PORT", "7890"))
 ROOM_PREFIX = os.environ.get("LIVEKIT_ROOM_PREFIX", "iot-device-")
+TOKEN_SERVER_ENV = os.environ.get("TOKEN_SERVER_ENV", "development").strip().lower()
+REQUIRE_PRODUCTION_CONFIG = TOKEN_SERVER_ENV in PRODUCTION_ENVIRONMENTS or env_flag(
+    "TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG"
+)
+ALLOWED_ORIGINS = parse_allowed_origins(
+    os.environ.get("TOKEN_SERVER_ALLOWED_ORIGINS") or os.environ.get("CORS_ALLOWED_ORIGINS") or ""
+)
 
 
 def create_token(room_name: str, identity: str) -> str:
@@ -176,10 +209,12 @@ class TokenHandler(BaseHTTPRequestHandler):
     def _cors_headers(self):
         origin = self.headers.get("Origin")
         if origin:
-            self.send_header("Access-Control-Allow-Origin", origin)
-            self.send_header("Access-Control-Allow-Credentials", "true")
+            allowed_origin = cors_allowed_origin(origin)
+            if allowed_origin:
+                self.send_header("Access-Control-Allow-Origin", allowed_origin)
+                self.send_header("Access-Control-Allow-Credentials", "true")
             self.send_header("Vary", "Origin")
-        else:
+        elif not REQUIRE_PRODUCTION_CONFIG:
             self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -200,9 +235,11 @@ def sanitize_room_prefix(value: str) -> str:
 
 def build_token_server_health() -> dict:
     payload = build_health_response(ROOM_PREFIX)
-    payload.setdefault("services", {})["livekitTokenSigning"] = livekit_token_signing_status()
-    warning = livekit_token_signing_warning()
-    if warning:
+    services = payload.setdefault("services", {})
+    services["livekitTokenSigning"] = livekit_token_signing_status()
+    services["cors"] = cors_status()
+    services["productionReadiness"] = production_readiness_status()
+    for warning in token_server_warnings():
         payload.setdefault("warnings", []).append(warning)
     return payload
 
@@ -225,15 +262,107 @@ def livekit_token_signing_status() -> dict:
 
 def livekit_token_signing_warning() -> str | None:
     if LIVEKIT_API_KEY_CONFIGURED and LIVEKIT_API_SECRET_CONFIGURED:
+        if API_KEY == DEFAULT_DEV_API_KEY or API_SECRET == DEFAULT_DEV_API_SECRET:
+            return "LiveKit dev token credentials are configured. Use site-specific LIVEKIT_API_KEY and LIVEKIT_API_SECRET outside local development."
         return None
     if LIVEKIT_API_KEY_CONFIGURED or LIVEKIT_API_SECRET_CONFIGURED:
         return "LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be configured together for real LiveKit rooms."
     return "Using LiveKit dev token defaults. Set LIVEKIT_API_KEY and LIVEKIT_API_SECRET for any shared or production environment."
 
 
+def cors_allowed_origin(origin: str) -> str | None:
+    normalized = normalize_origin(origin)
+    if not normalized:
+        return None
+    if normalized in ALLOWED_ORIGINS:
+        return normalized
+    if not ALLOWED_ORIGINS and not REQUIRE_PRODUCTION_CONFIG:
+        return normalized
+    return None
+
+
+def is_local_origin(origin: str) -> bool:
+    parsed = urlparse(origin)
+    return parsed.hostname in LOCAL_HOSTNAMES or bool(parsed.hostname and parsed.hostname.endswith(".localhost"))
+
+
+def is_secure_shared_origin(origin: str) -> bool:
+    parsed = urlparse(origin)
+    return parsed.scheme == "https" or is_local_origin(origin)
+
+
+def cors_status() -> dict:
+    if ALLOWED_ORIGINS:
+        status = "configured"
+    elif REQUIRE_PRODUCTION_CONFIG:
+        status = "not_configured"
+    else:
+        status = "permissive_dev"
+    return {
+        "status": status,
+        "allowedOrigins": sorted(ALLOWED_ORIGINS),
+        "allowCredentials": True,
+        "contract": "TOKEN_SERVER_ALLOWED_ORIGINS comma-separated origins",
+    }
+
+
+def production_config_errors() -> list[str]:
+    errors: list[str] = []
+    if not LIVEKIT_API_KEY_CONFIGURED or not LIVEKIT_API_SECRET_CONFIGURED:
+        errors.append("LIVEKIT_API_KEY and LIVEKIT_API_SECRET must both be configured")
+    elif API_KEY == DEFAULT_DEV_API_KEY or API_SECRET == DEFAULT_DEV_API_SECRET:
+        errors.append("LIVEKIT_API_KEY and LIVEKIT_API_SECRET must not use LiveKit dev defaults")
+
+    if not ALLOWED_ORIGINS:
+        errors.append("TOKEN_SERVER_ALLOWED_ORIGINS must include the OpenMRS browser origin")
+
+    insecure_origins = [origin for origin in ALLOWED_ORIGINS if not is_secure_shared_origin(origin)]
+    if insecure_origins:
+        errors.append(
+            "TOKEN_SERVER_ALLOWED_ORIGINS must use https:// for non-local origins: "
+            + ", ".join(sorted(insecure_origins))
+        )
+    return errors
+
+
+def production_readiness_status() -> dict:
+    errors = production_config_errors()
+    if REQUIRE_PRODUCTION_CONFIG:
+        status = "enforced" if not errors else "error"
+    else:
+        status = "demo_mode"
+    return {
+        "status": status,
+        "environment": TOKEN_SERVER_ENV or "development",
+        "required": REQUIRE_PRODUCTION_CONFIG,
+        "errors": errors if REQUIRE_PRODUCTION_CONFIG else [],
+        "contract": "Set TOKEN_SERVER_ENV=production or TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG=true",
+    }
+
+
+def token_server_warnings() -> list[str]:
+    warnings = []
+    signing_warning = livekit_token_signing_warning()
+    if signing_warning:
+        warnings.append(signing_warning)
+    if not ALLOWED_ORIGINS and not REQUIRE_PRODUCTION_CONFIG:
+        warnings.append(
+            "CORS is permissive for demo mode. Set TOKEN_SERVER_ALLOWED_ORIGINS before any shared or production deployment."
+        )
+    return warnings
+
+
+def validate_startup_config() -> None:
+    if not REQUIRE_PRODUCTION_CONFIG:
+        return
+    errors = production_config_errors()
+    if errors:
+        raise RuntimeError("Production readiness check failed: " + "; ".join(errors))
+
+
 if __name__ == "__main__":
-    warning = livekit_token_signing_warning()
-    if warning:
+    validate_startup_config()
+    for warning in token_server_warnings():
         print(f"[token-server] WARNING: {warning}")
     server = ThreadingHTTPServer(("0.0.0.0", PORT), TokenHandler)
     print(f"OpenMRS LiveKit helper listening on :{PORT}")

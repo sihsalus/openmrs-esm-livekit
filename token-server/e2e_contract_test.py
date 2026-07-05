@@ -152,6 +152,26 @@ def base64url_bytes(payload: bytes) -> str:
     return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
 
 
+def run_token_server_startup(
+    env_overrides: dict[str, str],
+    env_removals: tuple[str, ...] = (),
+) -> tuple[int | None, str]:
+    env = os.environ.copy()
+    for key in env_removals:
+        env.pop(key, None)
+    env.update(env_overrides)
+    process = subprocess.Popen(
+        [sys.executable, str(TOKEN_SERVER)],
+        cwd=str(TOKEN_SERVER.parent),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    output, _stderr = process.communicate(timeout=5)
+    return process.returncode, output
+
+
 class TokenServerE2ETest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -167,6 +187,8 @@ class TokenServerE2ETest(unittest.TestCase):
         env.update(
             {
                 "TOKEN_SERVER_PORT": str(cls.port),
+                "TOKEN_SERVER_ENV": "production",
+                "TOKEN_SERVER_ALLOWED_ORIGINS": "https://openmrs.test",
                 "LIVEKIT_API_KEY": "test-key",
                 "LIVEKIT_API_SECRET": "test-secret",
                 "OLLAMA_URL": cls.ollama_url,
@@ -229,6 +251,9 @@ class TokenServerE2ETest(unittest.TestCase):
         payload, _response = request_json(self.base_url, "/health")
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["services"]["livekitTokenSigning"]["status"], "configured")
+        self.assertEqual(payload["services"]["cors"]["status"], "configured")
+        self.assertEqual(payload["services"]["cors"]["allowedOrigins"], ["https://openmrs.test"])
+        self.assertEqual(payload["services"]["productionReadiness"]["status"], "enforced")
         self.assertEqual(payload["services"]["agent"]["contract"], "LiveKit data-channel topic agent-data")
         self.assertEqual(payload["services"]["openmrsDraftWrite"]["status"], "configured")
         self.assertIn("pediatric-respiratory", payload["services"]["syntheticData"]["cases"])
@@ -339,12 +364,23 @@ class TokenServerE2ETest(unittest.TestCase):
         request = urllib.request.Request(
             f"{self.base_url}/openmrs/draft",
             method="OPTIONS",
-            headers={"Origin": "http://openmrs.test", "Access-Control-Request-Method": "POST"},
+            headers={"Origin": "https://openmrs.test", "Access-Control-Request-Method": "POST"},
         )
         with urllib.request.urlopen(request, timeout=10) as response:
             self.assertEqual(response.status, 204)
-            self.assertEqual(response.headers["Access-Control-Allow-Origin"], "http://openmrs.test")
+            self.assertEqual(response.headers["Access-Control-Allow-Origin"], "https://openmrs.test")
             self.assertEqual(response.headers["Access-Control-Allow-Credentials"], "true")
+
+    def test_cors_rejects_origins_outside_allowlist(self):
+        request = urllib.request.Request(
+            f"{self.base_url}/openmrs/draft",
+            method="OPTIONS",
+            headers={"Origin": "https://evil.test", "Access-Control-Request-Method": "POST"},
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            self.assertEqual(response.status, 204)
+            self.assertIsNone(response.headers.get("Access-Control-Allow-Origin"))
+            self.assertIsNone(response.headers.get("Access-Control-Allow-Credentials"))
 
     def test_token_rejects_invalid_json(self):
         request = urllib.request.Request(
@@ -361,6 +397,40 @@ class TokenServerE2ETest(unittest.TestCase):
         payload = json.loads(context.exception.read().decode("utf-8"))
         self.assertEqual(payload["status"], "error")
         self.assertIn("valid JSON", payload["error"])
+
+    def test_production_mode_rejects_missing_credentials_and_cors_allowlist(self):
+        returncode, output = run_token_server_startup(
+            {
+                "TOKEN_SERVER_PORT": str(free_port()),
+                "TOKEN_SERVER_ENV": "production",
+            },
+            env_removals=(
+                "LIVEKIT_API_KEY",
+                "LIVEKIT_API_SECRET",
+                "TOKEN_SERVER_ALLOWED_ORIGINS",
+                "CORS_ALLOWED_ORIGINS",
+            ),
+        )
+
+        self.assertNotEqual(returncode, 0)
+        self.assertIn("Production readiness check failed", output)
+        self.assertIn("LIVEKIT_API_KEY and LIVEKIT_API_SECRET", output)
+        self.assertIn("TOKEN_SERVER_ALLOWED_ORIGINS", output)
+
+    def test_production_mode_rejects_livekit_dev_defaults(self):
+        returncode, output = run_token_server_startup(
+            {
+                "TOKEN_SERVER_PORT": str(free_port()),
+                "TOKEN_SERVER_ENV": "production",
+                "TOKEN_SERVER_ALLOWED_ORIGINS": "https://openmrs.test",
+                "LIVEKIT_API_KEY": "devkey",
+                "LIVEKIT_API_SECRET": "secret",
+            }
+        )
+
+        self.assertNotEqual(returncode, 0)
+        self.assertIn("Production readiness check failed", output)
+        self.assertIn("must not use LiveKit dev defaults", output)
 
 
 if __name__ == "__main__":

@@ -29,6 +29,34 @@ Returns local service status for the frontend status panel.
 
 Detailed service status is available under `services`, including `services.openmrsDraftWrite` for OpenMRS REST write readiness.
 `services.livekitTokenSigning` reports whether `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` are configured.
+`services.cors` reports whether browser origins are allowlisted, and
+`services.productionReadiness` reports whether production checks are enforced.
+
+## Production readiness gate
+
+For shared demos, staging, or production, run with production checks enabled:
+
+```bash
+TOKEN_SERVER_ENV=production
+# or
+TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG=true
+```
+
+When production checks are enabled, startup fails unless all required controls
+are configured:
+
+```bash
+LIVEKIT_API_KEY=<site-livekit-api-key>
+LIVEKIT_API_SECRET=<site-livekit-api-secret>
+TOKEN_SERVER_ALLOWED_ORIGINS=https://openmrs.example.org
+```
+
+Production mode rejects missing LiveKit credentials, LiveKit development
+defaults (`devkey` / `secret`), missing CORS allowlists, and non-HTTPS
+allowlisted origins except localhost/loopback.
+
+In development mode, CORS remains permissive for local demos but `/health`
+returns a warning until `TOKEN_SERVER_ALLOWED_ORIGINS` is configured.
 
 ### POST /token
 
