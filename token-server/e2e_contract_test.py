@@ -170,6 +170,14 @@ class TokenServerE2ETest(unittest.TestCase):
                 "OPENMRS_PROVIDER_UUID": "provider-uuid",
                 "OPENMRS_ENCOUNTER_ROLE_UUID": "encounter-role-uuid",
                 "OPENMRS_DRAFT_OBS_CONCEPT_UUID": "obs-concept-uuid",
+                "OPENMRS_STRUCTURED_OBS_CONCEPTS": json.dumps(
+                    {
+                        "chiefComplaint": "chief-complaint-concept-uuid",
+                        "symptoms": "symptom-concept-uuid",
+                        "medicationsMentioned": "medication-concept-uuid",
+                        "patientInstructions": "instructions-concept-uuid",
+                    }
+                ),
                 "OPENMRS_USERNAME": "admin",
                 "OPENMRS_PASSWORD": "Admin123",
             }
@@ -210,6 +218,7 @@ class TokenServerE2ETest(unittest.TestCase):
         payload, _response = request_json(self.base_url, "/health")
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["services"]["livekitTokenSigning"]["status"], "configured")
+        self.assertEqual(payload["services"]["agent"]["contract"], "LiveKit data-channel topic agent-data")
         self.assertEqual(payload["services"]["openmrsDraftWrite"]["status"], "configured")
         self.assertIn("pediatric-respiratory", payload["services"]["syntheticData"]["cases"])
         self.assertEqual(payload["services"]["recording"]["status"], "manifest_only")
@@ -283,6 +292,11 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(created["location"], "location-uuid")
         self.assertEqual(created["encounterProviders"][0]["provider"], "provider-uuid")
         self.assertIn("AI-generated clinical draft", created["obs"][0]["value"])
+        structured_obs = {(obs["concept"], obs["value"]) for obs in created["obs"][1:]}
+        self.assertIn(("chief-complaint-concept-uuid", "cough"), structured_obs)
+        self.assertIn(("symptom-concept-uuid", "cough"), structured_obs)
+        self.assertIn(("medication-concept-uuid", "paracetamol"), structured_obs)
+        self.assertIn(("instructions-concept-uuid", "fluids"), structured_obs)
 
     def test_cors_supports_credentialed_o3_requests(self):
         request = urllib.request.Request(

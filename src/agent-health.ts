@@ -3,6 +3,7 @@ export type ServiceStatus = 'ok' | 'error' | 'pending' | 'checking';
 export interface ServiceHealth {
   livekit: ServiceStatus;
   tokenServer: ServiceStatus;
+  agent: ServiceStatus;
   openmrs: ServiceStatus;
   stt: ServiceStatus;
   tts: ServiceStatus;
@@ -12,6 +13,7 @@ export interface ServiceHealth {
 export const initialHealth: ServiceHealth = {
   livekit: 'pending',
   tokenServer: 'pending',
+  agent: 'pending',
   openmrs: 'pending',
   stt: 'pending',
   tts: 'pending',
@@ -22,6 +24,7 @@ export function checkingHealth(): ServiceHealth {
   return {
     livekit: 'checking',
     tokenServer: 'checking',
+    agent: 'checking',
     openmrs: 'checking',
     stt: 'checking',
     tts: 'checking',
@@ -38,6 +41,7 @@ export function normalizeTokenServerHealth(payload: unknown): ServiceHealth | nu
   return {
     livekit: serviceHealthToStatus(serviceStatus(services.livekit)),
     tokenServer: serviceHealthToStatus(serviceStatus(services.tokenServer)),
+    agent: serviceHealthToStatus(serviceStatus(services.agent) ?? serviceStatus(services.livekitAgent)),
     openmrs: serviceHealthToStatus(serviceStatus(services.openmrs)),
     stt: serviceHealthToStatus(serviceStatus(services.stt)),
     tts: serviceHealthToStatus(serviceStatus(services.tts)),

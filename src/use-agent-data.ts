@@ -180,12 +180,19 @@ function isAgentDraft(payload: unknown): payload is AgentDraft {
   }
 
   return (
+    (payload.patientUuid === undefined ||
+      payload.patientUuid === null ||
+      typeof payload.patientUuid === 'string') &&
     typeof payload.chiefComplaint === 'string' &&
     isStringArray(payload.symptoms) &&
     isStringArray(payload.medicationsMentioned) &&
     isStringArray(payload.allergiesMentioned) &&
     typeof payload.assessmentNotes === 'string' &&
-    typeof payload.patientInstructions === 'string'
+    typeof payload.patientInstructions === 'string' &&
+    (payload.facts === undefined || isAgentClinicalFactArray(payload.facts)) &&
+    (payload.reviewQueue === undefined || isAgentClinicalFactArray(payload.reviewQueue)) &&
+    (payload.missingFields === undefined || isStringArray(payload.missingFields)) &&
+    (payload.clinicianReviewRequired === undefined || typeof payload.clinicianReviewRequired === 'boolean')
   );
 }
 
@@ -203,4 +210,23 @@ function isRecord(payload: unknown): payload is Record<string, unknown> {
 
 function isStringArray(payload: unknown): payload is string[] {
   return Array.isArray(payload) && payload.every((item) => typeof item === 'string');
+}
+
+function isAgentClinicalFactArray(payload: unknown): payload is AgentClinicalFact[] {
+  return Array.isArray(payload) && payload.every(isAgentClinicalFact);
+}
+
+function isAgentClinicalFact(payload: unknown): payload is AgentClinicalFact {
+  if (!isRecord(payload)) {
+    return false;
+  }
+
+  return (
+    typeof payload.kind === 'string' &&
+    typeof payload.value === 'string' &&
+    typeof payload.confidence === 'number' &&
+    Number.isFinite(payload.confidence) &&
+    typeof payload.status === 'string' &&
+    (payload.needsReview === undefined || typeof payload.needsReview === 'boolean')
+  );
 }

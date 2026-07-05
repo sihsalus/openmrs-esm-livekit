@@ -25,14 +25,20 @@ export async function fetchLivekitToken(
 export interface OpenmrsDraftPayload {
   patientUuid: string;
   draft: {
+    patientUuid?: string | null;
     chiefComplaint: string;
     symptoms: string[];
     medicationsMentioned: string[];
     allergiesMentioned: string[];
     assessmentNotes: string;
     patientInstructions: string;
+    facts?: unknown[];
+    reviewQueue?: unknown[];
+    missingFields?: string[];
+    clinicianReviewRequired?: boolean;
   };
   redactedTranscript?: string;
+  structuredObsConcepts?: Record<string, string>;
   writeToOpenmrs?: boolean;
 }
 

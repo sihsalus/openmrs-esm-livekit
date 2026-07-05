@@ -141,7 +141,7 @@ By default this endpoint is safe: it queues locally and returns a preview of the
       "patient": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
       "encounterType": "...",
       "location": "...",
-      "obs": [{"concept": "...", "value": "AI-generated clinical draft..."}]
+      "obs": [{ "concept": "...", "value": "AI-generated clinical draft..." }]
     }
   }
 }
@@ -158,12 +158,15 @@ OPENMRS_LOCATION_UUID=<location-uuid>
 OPENMRS_DRAFT_OBS_CONCEPT_UUID=<text-concept-uuid-for-ai-draft>
 ```
 
-Optional provider metadata:
+Optional provider and structured obs metadata:
 
 ```bash
 OPENMRS_PROVIDER_UUID=<provider-uuid>
 OPENMRS_ENCOUNTER_ROLE_UUID=<encounter-role-uuid>
+OPENMRS_STRUCTURED_OBS_CONCEPTS='{"chiefComplaint":"...","symptoms":"...","medicationsMentioned":"...","allergiesMentioned":"...","assessmentNotes":"...","patientInstructions":"..."}'
 ```
+
+`OPENMRS_DRAFT_OBS_CONCEPT_UUID` keeps the full reviewable text note. Structured concept mappings are additive: when configured, the helper also emits one obs per mapped scalar or list item. A request can override or add mappings with a `structuredObsConcepts` object using the same keys.
 
 Authentication can be supplied either by server environment or forwarded from the O3 frontend request:
 

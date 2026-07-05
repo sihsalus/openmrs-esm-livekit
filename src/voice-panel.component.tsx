@@ -37,7 +37,7 @@ import {
   resolveTokenServerPath,
   saveOpenmrsDraft,
 } from './livekit-token';
-import { useAgentData } from './use-agent-data';
+import { useAgentData, type AgentClinicalFact } from './use-agent-data';
 import {
   checkingHealth,
   initialHealth,
@@ -65,13 +65,20 @@ type FlowStep =
 type StepStatus = 'idle' | 'running' | 'done';
 
 interface EncounterDraft {
+  patientUuid?: string | null;
   chiefComplaint: string;
   symptoms: string[];
   medicationsMentioned: string[];
   allergiesMentioned: string[];
   assessmentNotes: string;
   patientInstructions: string;
+  facts?: AgentClinicalFact[];
+  reviewQueue?: AgentClinicalFact[];
+  missingFields?: string[];
+  clinicianReviewRequired?: boolean;
 }
+
+const agentFallbackDelaySeconds = 12;
 
 const DEMO_TRANSCRIPT_DOCTOR =
   'The patient reports persistent cough for five days, low-grade fever, and mild chest discomfort. No shortness of breath at rest. Currently taking paracetamol 500mg every 8 hours. No known drug allergies. Assessment: likely viral upper respiratory tract infection. Plan: continue paracetamol, increase fluid intake, return if symptoms worsen or if difficulty breathing develops.';
@@ -91,6 +98,17 @@ const DEMO_DRAFT: EncounterDraft = {
     'Likely viral upper respiratory tract infection. No signs of pneumonia. Needs clinician review.',
   patientInstructions:
     'Continue paracetamol, increase fluid intake, return if breathing worsens or fever exceeds 38.5C.',
+  missingFields: ['Respiratory rate', 'Oxygen saturation'],
+  reviewQueue: [
+    {
+      kind: 'assessment',
+      value: 'Likely viral upper respiratory tract infection',
+      confidence: 0.72,
+      status: 'detected',
+      needsReview: true,
+    },
+  ],
+  clinicianReviewRequired: true,
 };
 
 const initialStepStatus: Record<FlowStep, StepStatus> = {
@@ -278,6 +296,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const [muted, setMuted] = useState(true);
   const [micError, setMicError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [agentWaitSeconds, setAgentWaitSeconds] = useState(0);
   const [doctorLanguage, setDoctorLanguage] = useState<LanguageCode>('en');
   const [patientLanguage, setPatientLanguage] = useState<LanguageCode>('es');
   const [stepStatus, setStepStatus] = useState<Record<FlowStep, StepStatus>>(initialStepStatus);
@@ -290,6 +309,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [health, setHealth] = useState<ServiceHealth>(initialHealth);
   const timeouts = useRef<number[]>([]);
+  const lastAppliedAgentDraft = useRef<EncounterDraft | null>(null);
   const {
     transcripts: agentTranscripts,
     agentDraft,
@@ -332,9 +352,15 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
 
   // Merge agent data into UI when real data arrives
   useEffect(() => {
-    if (agentDraft && !demoRunning) {
-      setDraft(agentDraft);
+    if (!agentDraft || demoRunning || lastAppliedAgentDraft.current === agentDraft) {
+      return;
     }
+
+    lastAppliedAgentDraft.current = agentDraft;
+    setDraft(agentDraft);
+    setDraftSaved(false);
+    setDraftSaveMessage(null);
+    setDraftSaveError(null);
   }, [agentDraft, demoRunning]);
 
   const liveTranscriptText = useMemo(() => {
@@ -348,6 +374,36 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       )
       .join('\n\n');
   }, [agentTranscripts, t]);
+
+  const agentHasActivity = agentTranscripts.length > 0 || Boolean(agentDraft || agentStatus);
+  const hasFlowOutput = Boolean(draft || redactedTranscript || liveTranscriptText);
+
+  useEffect(() => {
+    if (connectionState !== ConnectionState.Connected || agentHasActivity || agentError || hasFlowOutput) {
+      setAgentWaitSeconds(0);
+      return;
+    }
+
+    const interval = setInterval(() => setAgentWaitSeconds((seconds) => seconds + 1), 1000);
+    return () => clearInterval(interval);
+  }, [agentError, agentHasActivity, connectionState, hasFlowOutput]);
+
+  const agentHealth: ServiceStatus = agentError
+    ? 'error'
+    : agentHasActivity
+      ? 'ok'
+      : connectionState === ConnectionState.Connected
+        ? agentWaitSeconds >= agentFallbackDelaySeconds
+          ? 'error'
+          : 'checking'
+        : 'pending';
+  const showAgentFallback =
+    connectionState === ConnectionState.Connected &&
+    agentWaitSeconds >= agentFallbackDelaySeconds &&
+    !agentHasActivity &&
+    !hasFlowOutput &&
+    !agentError &&
+    !demoRunning;
 
   const toggleMute = useCallback(async () => {
     if (localParticipant) {
@@ -412,6 +468,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     setDraftSaveMessage(null);
     setDraftSaveError(null);
     setDemoRunning(false);
+    lastAppliedAgentDraft.current = null;
     clearTranscripts();
   }, [clearTranscripts]);
 
@@ -547,6 +604,24 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
         />
       </div>
 
+      {showAgentFallback && (
+        <div className={styles.agentFallback} role="status">
+          <WarningAlt />
+          <div>
+            <strong>{t('agentNotResponding', 'Agent not publishing data')}</strong>
+            <p>
+              {t(
+                'agentNotRespondingDetail',
+                'Start the OpenMRS LiveKit agent for this room, or run the local demo flow while the room stays connected.',
+              )}
+            </p>
+          </div>
+          <Button kind="tertiary" size="sm" renderIcon={Play} onClick={runDemoConversation}>
+            {t('runDemo', 'Run demo conversation')}
+          </Button>
+        </div>
+      )}
+
       {/* ---- Local AI pipeline ---- */}
       <section className={styles.section} aria-label={t('translationFlow', 'Translation flow')}>
         <div className={styles.sectionHeader}>
@@ -603,21 +678,30 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <h5>{t('encounterDraft', 'Encounter draft')}</h5>
-            {draftSaved ? (
-              <Tag type="green" size="sm" renderIcon={Checkmark}>
-                {t('queuedForReview', 'Queued for clinician review')}
-              </Tag>
-            ) : (
-              <Button
-                kind="primary"
-                size="sm"
-                renderIcon={Save}
-                onClick={saveDraft}
-                disabled={draftSaving || !patientUuid}
-              >
-                {draftSaving ? t('savingDraft', 'Saving draft...') : t('saveDraft', 'Save draft to OpenMRS')}
-              </Button>
-            )}
+            <div className={styles.headerActions}>
+              {draft.clinicianReviewRequired !== false && !draftSaved && (
+                <Tag type="purple" size="sm" renderIcon={WarningAlt}>
+                  {t('reviewRequired', 'Review required')}
+                </Tag>
+              )}
+              {draftSaved ? (
+                <Tag type="green" size="sm" renderIcon={Checkmark}>
+                  {t('queuedForReview', 'Queued for clinician review')}
+                </Tag>
+              ) : (
+                <Button
+                  kind="primary"
+                  size="sm"
+                  renderIcon={Save}
+                  onClick={saveDraft}
+                  disabled={draftSaving || !patientUuid}
+                >
+                  {draftSaving
+                    ? t('savingDraft', 'Saving draft...')
+                    : t('saveDraft', 'Save draft to OpenMRS')}
+                </Button>
+              )}
+            </div>
           </div>
           {draftSaveMessage && <p className={styles.agentStatus}>{draftSaveMessage}</p>}
           <div className={styles.draftGrid}>
@@ -632,9 +716,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
               id="symptoms"
               labelText={t('symptoms', 'Symptoms')}
               value={draft.symptoms.join(', ')}
-              onChange={(e) =>
-                setDraft({ ...draft, symptoms: e.target.value.split(',').map((s) => s.trim()) })
-              }
+              onChange={(e) => setDraft({ ...draft, symptoms: splitListInput(e.target.value) })}
               readOnly={draftSaved}
             />
             <TextInput
@@ -644,7 +726,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
               onChange={(e) =>
                 setDraft({
                   ...draft,
-                  medicationsMentioned: e.target.value.split(',').map((s) => s.trim()),
+                  medicationsMentioned: splitListInput(e.target.value),
                 })
               }
               readOnly={draftSaved}
@@ -652,15 +734,12 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
             <TextInput
               id="allergies"
               labelText={t('allergiesMentioned', 'Allergies mentioned')}
-              value={
-                draft.allergiesMentioned.length > 0
-                  ? draft.allergiesMentioned.join(', ')
-                  : t('noneReported', 'None reported')
-              }
+              value={draft.allergiesMentioned.join(', ')}
+              placeholder={t('noneReported', 'None reported')}
               onChange={(e) =>
                 setDraft({
                   ...draft,
-                  allergiesMentioned: e.target.value.split(',').map((s) => s.trim()),
+                  allergiesMentioned: splitListInput(e.target.value),
                 })
               }
               readOnly={draftSaved}
@@ -682,6 +761,42 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
               rows={2}
             />
           </div>
+
+          {(draft.missingFields?.length || draft.reviewQueue?.length) && (
+            <div className={styles.reviewPanel}>
+              {draft.missingFields?.length ? (
+                <div className={styles.reviewBlock}>
+                  <h6>{t('missingFields', 'Missing fields')}</h6>
+                  <div className={styles.tagList}>
+                    {draft.missingFields.map((field) => (
+                      <Tag key={field} type="red" size="sm">
+                        {field}
+                      </Tag>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {draft.reviewQueue?.length ? (
+                <div className={styles.reviewBlock}>
+                  <h6>{t('reviewQueue', 'Review queue')}</h6>
+                  <ul className={styles.reviewList}>
+                    {draft.reviewQueue.map((item, index) => (
+                      <li key={`${item.kind}-${item.value}-${index}`} className={styles.reviewItem}>
+                        <div>
+                          <span className={styles.reviewKind}>{formatFactKind(item.kind)}</span>
+                          <span className={styles.reviewValue}>{item.value}</span>
+                        </div>
+                        <Tag type={item.needsReview ? 'red' : 'gray'} size="sm">
+                          {formatConfidence(item.confidence)}
+                        </Tag>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          )}
         </section>
       )}
 
@@ -704,14 +819,39 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
             </div>
             <div className={styles.healthPanel}>
               <h5>{t('serviceHealth', 'Service health')}</h5>
-              <ul className={styles.healthList}>
-                <HealthRow label="LiveKit" status={health.livekit} />
-                <HealthRow label={t('tokenServer', 'Token server')} status={health.tokenServer} />
-                <HealthRow label="OpenMRS" status={health.openmrs} />
-                <HealthRow label="STT" status={health.stt} />
-                <HealthRow label="TTS" status={health.tts} />
-                <HealthRow label="LLM" status={health.llm} />
-              </ul>
+              <div className={styles.healthGroup}>
+                <h6>{t('runtimeServices', 'Runtime services')}</h6>
+                <ul className={styles.healthList}>
+                  <HealthRow
+                    label="LiveKit"
+                    status={health.livekit}
+                    detail={t('livekitHealthDetail', 'Room transport and media server')}
+                  />
+                  <HealthRow
+                    label={t('tokenServer', 'Token server')}
+                    status={health.tokenServer}
+                    detail={t('tokenServerHealthDetail', 'Room tokens and helper API')}
+                  />
+                  <HealthRow
+                    label={t('agent', 'Agent')}
+                    status={agentHealth}
+                    detail={t('agentHealthDetail', 'Publishes transcript and draft data')}
+                  />
+                  <HealthRow
+                    label="OpenMRS"
+                    status={health.openmrs}
+                    detail={t('openmrsHealthDetail', 'Patient record and encounter write target')}
+                  />
+                </ul>
+              </div>
+              <div className={styles.healthGroup}>
+                <h6>{t('localAiCapabilities', 'Local AI capabilities')}</h6>
+                <ul className={styles.healthList}>
+                  <HealthRow label="STT" status={health.stt} />
+                  <HealthRow label="TTS" status={health.tts} />
+                  <HealthRow label="LLM" status={health.llm} />
+                </ul>
+              </div>
             </div>
           </div>
         </AccordionItem>
@@ -782,7 +922,11 @@ const PrivacyItem: React.FC<{ icon: React.ComponentType; text: string }> = ({ ic
   </li>
 );
 
-const HealthRow: React.FC<{ label: string; status: ServiceStatus }> = ({ label, status }) => {
+const HealthRow: React.FC<{ label: string; status: ServiceStatus; detail?: string }> = ({
+  label,
+  status,
+  detail,
+}) => {
   const { t } = useTranslation();
   const statusLabel: Record<ServiceStatus, string> = {
     ok: t('healthy', 'Healthy'),
@@ -799,7 +943,10 @@ const HealthRow: React.FC<{ label: string; status: ServiceStatus }> = ({ label, 
 
   return (
     <li className={styles.healthRow}>
-      <span>{label}</span>
+      <span>
+        <strong>{label}</strong>
+        {detail && <small>{detail}</small>}
+      </span>
       <Tag type={tagType[status] as 'green' | 'red' | 'gray' | 'blue'} size="sm">
         {statusLabel[status]}
       </Tag>
@@ -826,6 +973,24 @@ function transcriptRoleLabel(
     return t('patient', 'Patient');
   }
   return t('assistant', 'Assistant');
+}
+
+function splitListInput(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatFactKind(kind: string): string {
+  return kind.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatConfidence(confidence: number): string {
+  if (!Number.isFinite(confidence)) {
+    return 'Review';
+  }
+  return `${Math.round(confidence * 100)}%`;
 }
 
 async function checkHealth(
@@ -855,6 +1020,7 @@ async function checkHealth(
     setHealth((h) => ({
       ...h,
       tokenServer: 'error',
+      agent: 'pending',
       stt: 'pending',
       tts: 'pending',
       llm: 'pending',
