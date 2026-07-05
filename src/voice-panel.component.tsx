@@ -842,6 +842,11 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                     status={health.openmrs}
                     detail={t('openmrsHealthDetail', 'Patient record and encounter write target')}
                   />
+                  <HealthRow
+                    label={t('draftWrite', 'Draft write')}
+                    status={health.openmrsDraftWrite}
+                    detail={t('draftWriteHealthDetail', 'Encounter save configuration')}
+                  />
                 </ul>
               </div>
               <div className={styles.healthGroup}>
