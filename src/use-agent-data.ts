@@ -24,6 +24,13 @@ export interface AgentMessage {
   payload: unknown;
 }
 
+export type ParsedAgentData =
+  | { type: 'transcript'; transcript: AgentTranscript }
+  | { type: 'draft'; draft: AgentDraft }
+  | { type: 'status'; status: string }
+  | { type: 'error'; error: string }
+  | null;
+
 const maxTranscripts = 100;
 
 export function useAgentData() {
@@ -43,40 +50,26 @@ export function useAgentData() {
 
   const handleData = useCallback((payload: Uint8Array, participant: unknown, kind: DataPacket_Kind) => {
     if (!mounted.current) return;
-    try {
-      const text = new TextDecoder().decode(payload);
-      const msg: AgentMessage = JSON.parse(text);
+    const parsed = parseAgentDataPayload(payload);
+    if (!parsed) return;
 
-      switch (msg.type) {
-        case 'transcript':
-        case 'translation': {
-          if (!isAgentTranscript(msg.payload)) {
-            return;
-          }
-          const transcript = msg.payload;
-          const timestamp = Number.isFinite(transcript.timestamp) ? transcript.timestamp : Date.now();
-          setTranscripts((prev) => [...prev.slice(-(maxTranscripts - 1)), { ...transcript, timestamp }]);
-          break;
-        }
-        case 'draft': {
-          if (isAgentDraft(msg.payload)) {
-            setAgentDraft(msg.payload);
-          }
-          break;
-        }
-        case 'status': {
-          const s = isRecord(msg.payload) ? msg.payload : {};
-          setAgentStatus(s.message || s.step || '');
-          break;
-        }
-        case 'error': {
-          const e = isRecord(msg.payload) ? msg.payload : {};
-          setAgentError(e.message || 'Agent error');
-          break;
-        }
+    switch (parsed.type) {
+      case 'transcript': {
+        setTranscripts((prev) => [...prev.slice(-(maxTranscripts - 1)), parsed.transcript]);
+        break;
       }
-    } catch {
-      // not JSON — ignore non-structured data
+      case 'draft': {
+        setAgentDraft(parsed.draft);
+        break;
+      }
+      case 'status': {
+        setAgentStatus(parsed.status);
+        break;
+      }
+      case 'error': {
+        setAgentError(parsed.error);
+        break;
+      }
     }
   }, []);
 
@@ -104,7 +97,48 @@ export function useAgentData() {
   };
 }
 
-function isAgentTranscript(payload: unknown): payload is AgentTranscript {
+export function parseAgentDataPayload(payload: Uint8Array, now: () => number = Date.now): ParsedAgentData {
+  try {
+    const text = new TextDecoder().decode(payload);
+    const msg: AgentMessage = JSON.parse(text);
+
+    switch (msg.type) {
+      case 'transcript':
+      case 'translation': {
+        if (!isAgentTranscriptPayload(msg.payload)) {
+          return null;
+        }
+        const timestamp =
+          typeof msg.payload.timestamp === 'number' && Number.isFinite(msg.payload.timestamp)
+            ? msg.payload.timestamp
+            : now();
+        return { type: 'transcript', transcript: { ...msg.payload, timestamp } };
+      }
+      case 'draft': {
+        if (!isAgentDraft(msg.payload)) {
+          return null;
+        }
+        return { type: 'draft', draft: msg.payload };
+      }
+      case 'status': {
+        const message = stringField(msg.payload, 'message') ?? stringField(msg.payload, 'step') ?? '';
+        return { type: 'status', status: message };
+      }
+      case 'error': {
+        const message = stringField(msg.payload, 'message') ?? 'Agent error';
+        return { type: 'error', error: message };
+      }
+      default:
+        return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+type AgentTranscriptPayload = Omit<AgentTranscript, 'timestamp'> & { timestamp?: unknown };
+
+function isAgentTranscriptPayload(payload: unknown): payload is AgentTranscriptPayload {
   if (!isRecord(payload)) {
     return false;
   }
@@ -132,6 +166,14 @@ function isAgentDraft(payload: unknown): payload is AgentDraft {
   );
 }
 
-function isRecord(payload: unknown): payload is Record<string, any> {
+function stringField(payload: unknown, key: string): string | undefined {
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+  const value = payload[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function isRecord(payload: unknown): payload is Record<string, unknown> {
   return typeof payload === 'object' && payload !== null;
 }

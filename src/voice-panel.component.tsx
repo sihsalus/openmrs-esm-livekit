@@ -38,6 +38,13 @@ import {
   saveOpenmrsDraft,
 } from './livekit-token';
 import { useAgentData } from './use-agent-data';
+import {
+  checkingHealth,
+  initialHealth,
+  normalizeTokenServerHealth,
+  type ServiceHealth,
+  type ServiceStatus,
+} from './agent-health';
 import AudioVisualizer from './audio-visualizer.component';
 import PatientContext from './patient-context.component';
 import type { Config } from './config-schema';
@@ -56,7 +63,6 @@ type FlowStep =
   | 'patientTranslation'
   | 'openmrsDraft';
 type StepStatus = 'idle' | 'running' | 'done';
-type ServiceStatus = 'ok' | 'error' | 'pending' | 'checking';
 
 interface EncounterDraft {
   chiefComplaint: string;
@@ -65,15 +71,6 @@ interface EncounterDraft {
   allergiesMentioned: string[];
   assessmentNotes: string;
   patientInstructions: string;
-}
-
-interface ServiceHealth {
-  livekit: ServiceStatus;
-  tokenServer: ServiceStatus;
-  openmrs: ServiceStatus;
-  stt: ServiceStatus;
-  tts: ServiceStatus;
-  llm: ServiceStatus;
 }
 
 const DEMO_TRANSCRIPT_DOCTOR =
@@ -103,15 +100,6 @@ const initialStepStatus: Record<FlowStep, StepStatus> = {
   patientStt: 'idle',
   patientTranslation: 'idle',
   openmrsDraft: 'idle',
-};
-
-const initialHealth: ServiceHealth = {
-  livekit: 'pending',
-  tokenServer: 'pending',
-  openmrs: 'pending',
-  stt: 'pending',
-  tts: 'pending',
-  llm: 'pending',
 };
 
 const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
@@ -827,7 +815,10 @@ function languageLabel(language: LanguageCode, t: ReturnType<typeof useTranslati
   return language === 'en' ? t('english', 'English') : t('spanish', 'Spanish');
 }
 
-function transcriptRoleLabel(role: 'doctor' | 'patient' | 'assistant', t: ReturnType<typeof useTranslation>['t']) {
+function transcriptRoleLabel(
+  role: 'doctor' | 'patient' | 'assistant',
+  t: ReturnType<typeof useTranslation>['t'],
+) {
   if (role === 'doctor') {
     return t('doctor', 'Doctor');
   }
@@ -842,14 +833,7 @@ async function checkHealth(
   tokenEndpoint: string,
   setHealth: React.Dispatch<React.SetStateAction<ServiceHealth>>,
 ) {
-  setHealth({
-    livekit: 'checking',
-    tokenServer: 'checking',
-    openmrs: 'checking',
-    stt: 'checking',
-    tts: 'checking',
-    llm: 'checking',
-  });
+  setHealth(checkingHealth());
 
   const httpLivekit = livekitUrl.replace(/^ws/, 'http');
 
@@ -860,18 +844,12 @@ async function checkHealth(
       signal: AbortSignal.timeout(5000),
     });
     const payload = await res.json().catch(() => null);
-    if (!res.ok || !payload?.services) {
+    const health = normalizeTokenServerHealth(payload);
+    if (!res.ok || !health) {
       throw new Error('Token server health response was not available');
     }
 
-    setHealth({
-      livekit: serviceHealthToStatus(payload.services.livekit?.status),
-      tokenServer: serviceHealthToStatus(payload.services.tokenServer?.status),
-      openmrs: serviceHealthToStatus(payload.services.openmrs?.status),
-      stt: serviceHealthToStatus(payload.services.stt?.status),
-      tts: serviceHealthToStatus(payload.services.tts?.status),
-      llm: serviceHealthToStatus(payload.services.ollama?.status),
-    });
+    setHealth(health);
     return;
   } catch {
     setHealth((h) => ({
@@ -898,16 +876,6 @@ async function checkHealth(
       }
     }),
   );
-}
-
-function serviceHealthToStatus(status: unknown): ServiceStatus {
-  if (status === 'ok' || status === 'configured') {
-    return 'ok';
-  }
-  if (status === 'unreachable' || status === 'error') {
-    return 'error';
-  }
-  return 'pending';
 }
 
 export default VoicePanel;
