@@ -20,16 +20,45 @@ The prototype has two parts:
 - `src/`: OpenMRS O3 microfrontend that renders the voice button, modal, patient context, LiveKit room, local AI workflow, privacy status, and draft review UI.
 - `token-server/`: local helper service that issues LiveKit tokens and exposes demo-ready AI endpoints for health checks, translation, STT/TTS contracts, PHI redaction, synthetic consultations, and OpenMRS draft queueing.
 
+The conversational AI agent lives in the companion repository:
+
+https://github.com/sihsalus/openmrs-livekit
+
+That agent owns the real-time AI loop: STT, LLM reasoning/tool calls, TTS, data
+channel publication, and OpenMRS draft events. This frontend uses Carbon UI for
+the clinical review console and should not contain model secrets or run the
+foundation model in the browser.
+
 Typical local flow:
 
 ```text
 OpenMRS O3 patient chart
   -> LiveKit room
+  -> LiveKit AI agent
   -> local helper service
-  -> local AI / Ollama-compatible drafting
+  -> configured model provider / Ollama-compatible drafting
   -> redacted encounter draft
   -> clinician review queue
 ```
+
+## AI Model Boundary
+
+The frontend does not hardcode a foundation model. It connects the OpenMRS chart
+to LiveKit and consumes `agent-data` messages from the LiveKit agent.
+
+Current model selection lives in the agent/helper configuration:
+
+- Agent default LLM: `LLM_PROVIDER=openai` with `OPENAI_MODEL=gpt-4.1-mini`.
+- Local-first demo LLM: `LLM_PROVIDER=ollama` with `OLLAMA_MODEL=qwen3:8b`, or
+  another local model selected by the site.
+- Helper `/compile-encounter`: uses local Ollama when available and falls back to
+  deterministic heuristics for demos/tests.
+
+The base agent prompt is Spanish because the current demo targets Spanish
+clinical encounters in a Latin American OpenMRS setting. It improves the default
+behavior for local clinical wording, negations, and identifiers such as `D.N.I.`
+and `H.C.`. It can be replaced by site-specific session instructions in the
+agent layer.
 
 ## Clinical safety model
 

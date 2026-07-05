@@ -493,11 +493,40 @@ def redact_phi(text: str, names: list[Any] | None = None) -> str:
         if len(name_text) >= 2:
             result = re.sub(re.escape(name_text), "[REDACTED_NAME]", result, flags=re.IGNORECASE)
 
+    months = (
+        "enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|"
+        "octubre|noviembre|diciembre"
+    )
     replacements = [
+        (
+            r"\b((?:nombre\s+del\s+paciente|nombre\s+completo|nombre|paciente|sr\.?|sra\.?|señor|señora)\s*[:#-]?\s+)"
+            r"((?-i:[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ'’-]{1,}(?:\s+[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ'’-]{1,}){1,3}))\b",
+            r"\1[REDACTED_NAME]",
+        ),
+        (
+            r"\b((?:se\s+llama|llamada|llamado)\s+)"
+            r"([A-Za-zÁÉÍÓÚÑáéíóúñ'’-]{2,}(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñ'’-]{2,}){1,3})\b",
+            r"\1[REDACTED_NAME]",
+        ),
         (r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[REDACTED_EMAIL]"),
         (r"(?<!\w)(?:\+?\d[\d .()\-]{7,}\d)(?!\w)", "[REDACTED_PHONE]"),
-        (r"\b(?:OpenMRS ID|patient id|national id|document id|ID)\s*[:#]?\s*[A-Z0-9-]+\b", "[REDACTED_ID]"),
+        (
+            r"\b(?:OpenMRS ID|patient id|national id|document id|ID|"
+            r"d\.?\s*n\.?\s*i\.?|dni|documento|doc\.?|"
+            r"h\.?\s*c\.?|hc|nhc|historia(?:\s+clinica|\s+clínica)?|"
+            r"carnet(?:\s+de)?\s+extranjer[ií]a|ce|pasaporte"
+            r")\s*[:#-]?\s*[A-Z0-9-]+\b",
+            "[REDACTED_ID]",
+        ),
+        (
+            r"\b((?:direcci[oó]n|domicilio|vive\s+en|reside\s+en)\s*[:#-]?\s+)"
+            r"([^;\n]{5,80}?)(?=(?:\.\s+"
+            r"(?:niega|presenta|refiere|tiene|acude|control|tel[eé]fono|tel|celular|dni|h\.?c\.?)"
+            r"\b|;|\n|$))",
+            r"\1[REDACTED_ADDRESS]",
+        ),
         (r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", "[REDACTED_DATE]"),
+        (rf"\b\d{{1,2}}\s+de\s+(?:{months})\s+de\s+\d{{2,4}}\b", "[REDACTED_DATE]"),
     ]
     for pattern, replacement in replacements:
         result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)

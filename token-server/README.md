@@ -32,6 +32,26 @@ Detailed service status is available under `services`, including `services.openm
 `services.cors` reports whether browser origins are allowlisted, and
 `services.productionReadiness` reports whether production checks are enforced.
 
+## AI Boundary
+
+This helper is not the real-time conversational agent. The LiveKit agent in
+`sihsalus/openmrs-livekit` owns STT, LLM tool calls, TTS, and data-channel draft
+events.
+
+The helper provides local contracts that support the demo and smoke tests:
+
+- LiveKit token signing.
+- Health/readiness reporting.
+- PHI redaction for helper-generated text.
+- Synthetic consultation generation.
+- `/compile-encounter` local drafting.
+- OpenMRS draft queue/write bridge.
+
+`/compile-encounter` uses local Ollama when available and falls back to
+deterministic heuristics. Its model is selected with `OLLAMA_MODEL`; examples
+use `medgemma:latest`, while the agent's local-first default uses `qwen3:8b`.
+The frontend and helper do not embed model secrets in browser code.
+
 ## Production readiness gate
 
 For shared demos, staging, or production, run with production checks enabled:
