@@ -33,6 +33,22 @@ def update_frontend() -> None:
     config_path.write_text(json.dumps(config, indent=2) + "\n")
 
 
+def update_frontend_dockerfile() -> None:
+    dockerfile_path = ROOT / "frontend" / "Dockerfile"
+    text = dockerfile_path.read_text()
+    if "NPM_CONFIG_FETCH_TIMEOUT" in text:
+        return
+
+    npm_retry_env = """ENV NPM_CONFIG_FETCH_RETRIES=5 \\
+    NPM_CONFIG_FETCH_RETRY_FACTOR=2 \\
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \\
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \\
+    NPM_CONFIG_FETCH_TIMEOUT=300000
+"""
+    text = text.replace("COPY spa-build-config.json .\n", f"COPY spa-build-config.json .\n\n{npm_retry_env}", 1)
+    dockerfile_path.write_text(text)
+
+
 def update_gateway() -> None:
     old_location = """  location /livekit/token {
     set $token_server http://${LIVEKIT_TOKEN_HOST}:7890;
@@ -149,6 +165,7 @@ def default_allowed_origins(host: str) -> str:
 
 def main() -> None:
     update_frontend()
+    update_frontend_dockerfile()
     update_gateway()
     write_livekit_config()
     update_env()

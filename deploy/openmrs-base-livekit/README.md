@@ -79,6 +79,7 @@ The script updates:
 
 - `frontend/spa-assemble-config.json` with `@sihsalus/esm-livekit-app`.
 - `frontend/config-core_demo.json` with the `/livekit/token` endpoint.
+- `frontend/Dockerfile` with npm registry retry settings for slower servers.
 - gateway templates with `/livekit/*` proxy and LiveKit CSP entries.
 - `deploy/livekit/livekit-docker.yaml` with the constrained UDP port range.
 - `.env` with LiveKit credentials, allowed origins, audit salt, and paths.
