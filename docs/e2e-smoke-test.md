@@ -99,6 +99,35 @@ Required preflight checks:
 13. Reload the patient chart and verify the saved/queued draft state is
     explainable to a clinician reviewer.
 
+## Demo Logs
+
+For the self-hosted demo stack, use container logs to verify the browser,
+LiveKit, helper, and agent path without storing raw clinical audio or transcript
+text:
+
+```bash
+docker logs -f openmrs-distro-referenceapplication-gateway-1
+docker logs -f openmrs-distro-referenceapplication-livekit-helper-1
+docker logs -f openmrs-distro-referenceapplication-livekit-1
+docker logs -f openmrs-distro-referenceapplication-livekit-agent-cpu-1
+docker logs -f openmrs-distro-referenceapplication-backend-1
+```
+
+Useful signals:
+
+- Gateway: static microfrontend chunks, `/livekit/token`, `/livekit/health`, and
+  OpenMRS REST/FHIR status codes.
+- Helper: token, health, synthetic consultation, compile, and draft queue
+  requests.
+- LiveKit: browser participant joins, agent assignment, ICE/UDP connection type,
+  track publication, and room close reason.
+- Agent: room connection, metadata parsing, prompt budgeting, readiness status,
+  TTS/STT/LLM timing, and transcript-save policy.
+
+The expected demo logging posture is metadata and operational status only.
+Helper and agent logs must not include raw transcript text, draft text, or
+unredacted patient identifiers.
+
 ## Go / No-Go Criteria
 
 Go for hackathon demo only if all are true:

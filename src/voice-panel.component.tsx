@@ -50,6 +50,10 @@ import {
   microphoneErrorMessage,
   microphoneUnavailableMessage,
 } from './microphone-availability';
+import {
+  clinicalLanguageDefaultsFromOpenmrsLocale,
+  type ClinicalLanguageCode,
+} from './clinical-language';
 import AudioVisualizer from './audio-visualizer.component';
 import PatientContext from './patient-context.component';
 import type { Config } from './config-schema';
@@ -59,7 +63,7 @@ interface VoicePanelProps {
   onClose?: () => void;
 }
 
-type LanguageCode = 'en' | 'es';
+type LanguageCode = ClinicalLanguageCode;
 type FlowStep =
   | 'doctorStt'
   | 'doctorTranslation'
@@ -85,35 +89,68 @@ interface EncounterDraft {
 
 const agentFallbackDelaySeconds = 12;
 
-const DEMO_TRANSCRIPT_DOCTOR =
-  'The patient reports persistent cough for five days, low-grade fever, and mild chest discomfort. No shortness of breath at rest. Currently taking paracetamol 500mg every 8 hours. No known drug allergies. Assessment: likely viral upper respiratory tract infection. Plan: continue paracetamol, increase fluid intake, return if symptoms worsen or if difficulty breathing develops.';
-
-const DEMO_TRANSCRIPT_PATIENT =
-  'He tenido tos por cinco dias, fiebre baja y un poco de molestia en el pecho. No me falta el aire en reposo. Estoy tomando paracetamol cada ocho horas. No soy alergico a ningun medicamento.';
-
-const DEMO_REDACTED_TRANSCRIPT =
-  'Doctor (EN): [PATIENT] reports persistent cough for five days, low-grade fever, and mild chest discomfort. No shortness of breath at rest. Currently taking paracetamol 500mg every 8 hours. No known drug allergies.\n\nPatient (ES): [PATIENT] ha tenido tos por cinco dias, fiebre baja y molestia en el pecho. No le falta el aire en reposo. Toma paracetamol cada ocho horas. Sin alergias conocidas.';
-
-const DEMO_DRAFT: EncounterDraft = {
-  chiefComplaint: 'Persistent cough and low-grade fever for 5 days',
-  symptoms: ['cough', 'low-grade fever', 'mild chest discomfort'],
-  medicationsMentioned: ['paracetamol 500mg q8h'],
-  allergiesMentioned: [],
-  assessmentNotes:
-    'Likely viral upper respiratory tract infection. No signs of pneumonia. Needs clinician review.',
-  patientInstructions:
-    'Continue paracetamol, increase fluid intake, return if breathing worsens or fever exceeds 38.5C.',
-  missingFields: ['Respiratory rate', 'Oxygen saturation'],
-  reviewQueue: [
-    {
-      kind: 'assessment',
-      value: 'Likely viral upper respiratory tract infection',
-      confidence: 0.72,
-      status: 'detected',
-      needsReview: true,
+const DEMO_CONVERSATIONS: Record<
+  LanguageCode,
+  {
+    doctorTranscript: string;
+    patientTranscript: string;
+    draft: EncounterDraft;
+  }
+> = {
+  en: {
+    doctorTranscript:
+      '[PATIENT] reports persistent cough for five days, low-grade fever, and mild chest discomfort. No shortness of breath at rest. Currently taking paracetamol 500mg every 8 hours. No known drug allergies.',
+    patientTranscript:
+      '[PATIENT] has had cough for five days, low-grade fever, and mild chest discomfort. No shortness of breath at rest. They are taking paracetamol every eight hours and report no known drug allergies.',
+    draft: {
+      chiefComplaint: 'Persistent cough and low-grade fever for 5 days',
+      symptoms: ['cough', 'low-grade fever', 'mild chest discomfort'],
+      medicationsMentioned: ['paracetamol 500mg q8h'],
+      allergiesMentioned: [],
+      assessmentNotes:
+        'Likely viral upper respiratory tract infection. No signs of pneumonia. Needs clinician review.',
+      patientInstructions:
+        'Continue paracetamol, increase fluid intake, return if breathing worsens or fever exceeds 38.5C.',
+      missingFields: ['Respiratory rate', 'Oxygen saturation'],
+      reviewQueue: [
+        {
+          kind: 'assessment',
+          value: 'Likely viral upper respiratory tract infection',
+          confidence: 0.72,
+          status: 'detected',
+          needsReview: true,
+        },
+      ],
+      clinicianReviewRequired: true,
     },
-  ],
-  clinicianReviewRequired: true,
+  },
+  es: {
+    doctorTranscript:
+      '[PATIENT] reporta tos persistente desde hace cinco dias, fiebre baja y molestia toracica leve. No presenta falta de aire en reposo. Toma paracetamol 500 mg cada 8 horas. Niega alergias conocidas a medicamentos.',
+    patientTranscript:
+      '[PATIENT] ha tenido tos por cinco dias, fiebre baja y un poco de molestia en el pecho. No le falta el aire en reposo. Toma paracetamol cada ocho horas. Sin alergias conocidas.',
+    draft: {
+      chiefComplaint: 'Tos persistente y fiebre baja por 5 dias',
+      symptoms: ['tos', 'fiebre baja', 'molestia toracica leve'],
+      medicationsMentioned: ['paracetamol 500 mg cada 8 horas'],
+      allergiesMentioned: [],
+      assessmentNotes:
+        'Probable infeccion viral de vias respiratorias altas. Sin signos claros de neumonia. Requiere revision clinica.',
+      patientInstructions:
+        'Continuar paracetamol, aumentar la ingesta de liquidos y regresar si empeora la respiracion o si la fiebre supera 38.5C.',
+      missingFields: ['Frecuencia respiratoria', 'Saturacion de oxigeno'],
+      reviewQueue: [
+        {
+          kind: 'assessment',
+          value: 'Probable infeccion viral de vias respiratorias altas',
+          confidence: 0.72,
+          status: 'detected',
+          needsReview: true,
+        },
+      ],
+      clinicianReviewRequired: true,
+    },
+  },
 };
 
 const initialStepStatus: Record<FlowStep, StepStatus> = {
@@ -295,15 +332,21 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   livekitUrl,
   tokenEndpoint,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const connectionState = useConnectionState();
   const { localParticipant } = useLocalParticipant();
+  const localeKey = `${i18n.resolvedLanguage || ''}|${i18n.language || ''}|${i18n.languages?.join(',') || ''}`;
+  const defaultLanguages = useMemo(
+    () => clinicalLanguageDefaultsFromOpenmrsLocale(i18n),
+    [i18n, localeKey],
+  );
+  const languageSelectionTouched = useRef(false);
   const [muted, setMuted] = useState(true);
   const [micError, setMicError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [agentWaitSeconds, setAgentWaitSeconds] = useState(0);
-  const [doctorLanguage, setDoctorLanguage] = useState<LanguageCode>('en');
-  const [patientLanguage, setPatientLanguage] = useState<LanguageCode>('es');
+  const [doctorLanguage, setDoctorLanguage] = useState<LanguageCode>(defaultLanguages.doctorLanguage);
+  const [patientLanguage, setPatientLanguage] = useState<LanguageCode>(defaultLanguages.patientLanguage);
   const [stepStatus, setStepStatus] = useState<Record<FlowStep, StepStatus>>(initialStepStatus);
   const [demoRunning, setDemoRunning] = useState(false);
   const [redactedTranscript, setRedactedTranscript] = useState('');
@@ -323,6 +366,25 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     agentError,
     clearTranscripts,
   } = useAgentData();
+
+  useEffect(() => {
+    if (languageSelectionTouched.current) {
+      return;
+    }
+
+    setDoctorLanguage(defaultLanguages.doctorLanguage);
+    setPatientLanguage(defaultLanguages.patientLanguage);
+  }, [defaultLanguages.doctorLanguage, defaultLanguages.patientLanguage]);
+
+  const updateDoctorLanguage = useCallback((language: LanguageCode) => {
+    languageSelectionTouched.current = true;
+    setDoctorLanguage(language);
+  }, []);
+
+  const updatePatientLanguage = useCallback((language: LanguageCode) => {
+    languageSelectionTouched.current = true;
+    setPatientLanguage(language);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => setElapsed((e) => e + 1), 1000);
@@ -482,11 +544,11 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     await runStep('patientTts', 1000);
     await runStep('patientStt', 1200);
     await runStep('patientTranslation', 1500);
-    setRedactedTranscript(DEMO_REDACTED_TRANSCRIPT);
+    setRedactedTranscript(buildDemoRedactedTranscript(doctorLanguage, patientLanguage, t));
     await runStep('openmrsDraft', 2000);
-    setDraft({ ...DEMO_DRAFT });
+    setDraft(cloneEncounterDraft(DEMO_CONVERSATIONS[doctorLanguage].draft));
     setDemoRunning(false);
-  }, [demoRunning, runStep]);
+  }, [demoRunning, doctorLanguage, patientLanguage, runStep, t]);
 
   const resetFlow = useCallback(() => {
     timeouts.current.forEach((id) => window.clearTimeout(id));
@@ -559,7 +621,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     },
     {
       step: 'doctorTranslation',
-      title: t('translateForPatient', 'Translate for patient'),
+      title: t('translateToLanguage', 'Translate to {{language}}', { language: patientLanguageLabel }),
       detail: t(
         'translateForPatientDetail',
         'Redact identifiers and translate clinical meaning to the patient language.',
@@ -577,7 +639,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     },
     {
       step: 'patientTranslation',
-      title: t('translateForDoctor', 'Translate for doctor'),
+      title: t('translateToLanguage', 'Translate to {{language}}', { language: doctorLanguageLabel }),
       detail: t('translateForDoctorDetail', 'Translate the patient response back to the clinician language.'),
     },
     {
@@ -672,12 +734,12 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           <LanguageToggle
             label={t('doctorLanguage', 'Doctor language')}
             value={doctorLanguage}
-            onChange={setDoctorLanguage}
+            onChange={updateDoctorLanguage}
           />
           <LanguageToggle
             label={t('patientLanguage', 'Patient language')}
             value={patientLanguage}
-            onChange={setPatientLanguage}
+            onChange={updatePatientLanguage}
           />
         </div>
 
@@ -1022,6 +1084,30 @@ const HealthRow: React.FC<{ label: string; status: ServiceStatus; detail?: strin
 
 function languageLabel(language: LanguageCode, t: ReturnType<typeof useTranslation>['t']) {
   return language === 'en' ? t('english', 'English') : t('spanish', 'Spanish');
+}
+
+function buildDemoRedactedTranscript(
+  doctorLanguage: LanguageCode,
+  patientLanguage: LanguageCode,
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  return `${transcriptRoleLabel('doctor', t)} (${doctorLanguage.toUpperCase()}): ${
+    DEMO_CONVERSATIONS[doctorLanguage].doctorTranscript
+  }\n\n${transcriptRoleLabel('patient', t)} (${patientLanguage.toUpperCase()}): ${
+    DEMO_CONVERSATIONS[patientLanguage].patientTranscript
+  }`;
+}
+
+function cloneEncounterDraft(draft: EncounterDraft): EncounterDraft {
+  return {
+    ...draft,
+    symptoms: [...draft.symptoms],
+    medicationsMentioned: [...draft.medicationsMentioned],
+    allergiesMentioned: [...draft.allergiesMentioned],
+    facts: draft.facts?.map((fact) => ({ ...fact })),
+    reviewQueue: draft.reviewQueue?.map((fact) => ({ ...fact })),
+    missingFields: draft.missingFields ? [...draft.missingFields] : undefined,
+  };
 }
 
 function transcriptRoleLabel(
