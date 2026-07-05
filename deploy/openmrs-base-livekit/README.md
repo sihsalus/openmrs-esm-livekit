@@ -27,9 +27,23 @@ contains the commit you want to deploy:
 OPENMRS_LIVEKIT_FRONTEND_VERSION=0.1.9
 ```
 
+Verify the package before rebuilding the OpenMRS frontend:
+
+```bash
+npm view @sihsalus/esm-livekit-app version
+```
+
+Tag pushes publish the frontend package through GitHub Actions. If the publish
+job fails with `npm ERR! 404 Not Found - PUT` for the existing
+`@sihsalus/esm-livekit-app` package, the `NPM_TOKEN` secret does not have publish
+permission for the `@sihsalus` scope. Rotate that secret with a token owned by an
+npm account that can publish the package, then publish a new patch version or
+rerun the failed tag job only after confirming the token permission.
+
 If the current source has not been published to npm yet, build the local bundle
 and update the OpenMRS importmap as a temporary hotfix instead of relying on the
-assembly version.
+assembly version. Keep this as a short-lived demo workaround; the reproducible
+path is still the npm package version above.
 
 Optional CPU-only AI settings:
 
@@ -90,3 +104,16 @@ docker logs openmrs-distro-referenceapplication-livekit-agent-cpu-1
 Expected helper logs include `LiveKit room metadata created` or `updated` when a
 room is opened from OpenMRS. Expected agent logs include `Metadata parsed` or
 `Room metadata derived from room name`.
+
+For a frontend hotfix deployment, also verify that the OpenMRS importmap points
+at the uploaded bundle and that nginx serves it:
+
+```bash
+curl http://<openmrs-host>/openmrs/spa/importmap.json
+curl -I http://<openmrs-host>/openmrs/spa/<uploaded-bundle-dir>/openmrs-esm-livekit-app.js
+```
+
+The deployed bundle should include the OpenMRS base FHIR workaround: it fetches
+`MedicationRequest?patient=<uuid>&_count=20` and filters active medication
+requests locally, instead of sending `status=active` to the base distro FHIR
+endpoint.

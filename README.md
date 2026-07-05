@@ -126,6 +126,25 @@ The OpenMRS module config schema exposes:
 
 The helper supports optional OpenMRS draft write configuration. See [token-server/README.md](token-server/README.md) for endpoint contracts, OpenMRS write safeguards, and environment variables.
 
+## OpenMRS Base Deployment
+
+The reproducible OpenMRS base stack lives in
+[deploy/openmrs-base-livekit](deploy/openmrs-base-livekit). It adds the LiveKit
+server, CPU agent, helper/token service, gateway routes, CSP, and frontend module
+configuration without committing site secrets.
+
+The normal frontend deployment path is npm:
+
+```bash
+npm view @sihsalus/esm-livekit-app version
+```
+
+Set `OPENMRS_LIVEKIT_FRONTEND_VERSION` only to a version that is actually
+published on npm. If a release tag builds successfully but npm publish fails,
+the OpenMRS frontend can temporarily serve a locally built `dist/` directory via
+the importmap for demo recovery, but that hotfix is not the long-term
+reproducible path.
+
 ## Tests
 
 Run the frontend test suite:
