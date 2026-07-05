@@ -11,6 +11,7 @@ ROOT = Path(os.environ.get("OPENMRS_DISTRO_ROOT", Path.cwd())).resolve()
 LIVEKIT_CONFIG = Path(
     os.environ.get("LIVEKIT_CONFIG", ROOT / "deploy" / "livekit" / "livekit.yaml")
 ).resolve()
+LIVEKIT_DOCKER_CONFIG = ROOT / "deploy" / "livekit" / "livekit-docker.yaml"
 FRONTEND_MODULE_VERSION = os.environ.get("OPENMRS_LIVEKIT_FRONTEND_VERSION", "0.1.9")
 LIVEKIT_HOST = os.environ.get("LIVEKIT_HOST", "localhost")
 TOKEN_SERVER_ALLOWED_ORIGINS = os.environ.get("TOKEN_SERVER_ALLOWED_ORIGINS", "").strip()
@@ -67,18 +68,27 @@ def update_gateway() -> None:
 
 
 def write_livekit_config() -> None:
-    text = LIVEKIT_CONFIG.read_text()
+    text = read_livekit_config()
     text = re.sub(r"(?m)^(\s*port_range_start:\s*)\d+", r"\g<1>56000", text)
     text = re.sub(r"(?m)^(\s*port_range_end:\s*)\d+", r"\g<1>56100", text)
-    target = ROOT / "deploy" / "livekit" / "livekit-docker.yaml"
-    target.write_text(text)
+    LIVEKIT_DOCKER_CONFIG.write_text(text)
 
 
 def parse_livekit_credentials() -> tuple[str, str]:
-    match = re.search(r"(?m)^keys:\s*\n\s+([^:\s]+):\s*(\S+)\s*$", LIVEKIT_CONFIG.read_text())
+    match = re.search(r"(?m)^keys:\s*\n\s+([^:\s]+):\s*(\S+)\s*$", read_livekit_config())
     if not match:
         raise RuntimeError("Could not parse LiveKit credentials")
     return match.group(1), match.group(2)
+
+
+def read_livekit_config() -> str:
+    if LIVEKIT_CONFIG.exists():
+        return LIVEKIT_CONFIG.read_text()
+    if LIVEKIT_DOCKER_CONFIG.exists():
+        return LIVEKIT_DOCKER_CONFIG.read_text()
+    raise FileNotFoundError(
+        f"LiveKit config not found at {LIVEKIT_CONFIG} or {LIVEKIT_DOCKER_CONFIG}"
+    )
 
 
 def update_env() -> None:

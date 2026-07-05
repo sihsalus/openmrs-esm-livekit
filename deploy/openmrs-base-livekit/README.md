@@ -67,10 +67,13 @@ Then configure the base distro:
 
 ```bash
 OPENMRS_DISTRO_ROOT="$OPENMRS_DISTRO_ROOT" \
-LIVEKIT_CONFIG=/path/to/livekit.yaml \
 LIVEKIT_HOST="$LIVEKIT_HOST" \
 python3 deploy/openmrs-base-livekit/configure_base_livekit.py
 ```
+
+Set `LIVEKIT_CONFIG=/path/to/livekit.yaml` only when you want to seed
+`deploy/livekit/livekit-docker.yaml` from a separate source config. On reruns,
+the script can reuse the installed `deploy/livekit/livekit-docker.yaml`.
 
 The script updates:
 
