@@ -28,10 +28,10 @@ describe('clinical language defaults', () => {
     });
   });
 
-  it('keeps the bilingual demo default when OpenMRS is localized in English', () => {
+  it('uses English for both sides when OpenMRS is localized in English', () => {
     expect(clinicalLanguageDefaultsFromLocale('en-US')).toEqual({
       doctorLanguage: 'en',
-      patientLanguage: 'es',
+      patientLanguage: 'en',
     });
   });
 

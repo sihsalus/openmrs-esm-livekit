@@ -65,7 +65,7 @@ export const clinicalLanguageDefaultsFromLocale = (
 
   return {
     doctorLanguage: 'en',
-    patientLanguage: 'es',
+    patientLanguage: 'en',
   };
 };
 
