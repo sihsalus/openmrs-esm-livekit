@@ -77,7 +77,7 @@ export function buildRoomName(patientUuid: string, roomPrefix: string): string {
 
 export function resolveLivekitServerUrl(configuredUrl?: string): string {
   if (configuredUrl?.trim()) {
-    return configuredUrl.trim();
+    return requireSecureBrowserTransport(configuredUrl.trim(), 'LiveKit server URL', ['wss:'], ['ws:']);
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -86,7 +86,7 @@ export function resolveLivekitServerUrl(configuredUrl?: string): string {
 
 export function resolveTokenEndpoint(configuredEndpoint?: string): string {
   if (configuredEndpoint?.trim()) {
-    return configuredEndpoint.trim();
+    return requireSecureBrowserTransport(configuredEndpoint.trim(), 'Token endpoint', ['https:'], ['http:']);
   }
 
   const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
@@ -100,4 +100,36 @@ export function resolveTokenServerPath(tokenEndpoint: string, path: string): str
   endpoint.search = '';
   endpoint.hash = '';
   return endpoint.toString();
+}
+
+function requireSecureBrowserTransport(
+  endpoint: string,
+  label: string,
+  secureProtocols: string[],
+  localCleartextProtocols: string[],
+): string {
+  if (window.location.protocol !== 'https:') {
+    return endpoint;
+  }
+
+  const url = new URL(endpoint, window.location.href);
+  const isSecure = secureProtocols.includes(url.protocol);
+  const isLocalCleartext = localCleartextProtocols.includes(url.protocol) && isLocalHostname(url.hostname);
+
+  if (!isSecure && !isLocalCleartext) {
+    const expectedProtocols = secureProtocols.map((protocol) => `${protocol}//`).join(' or ');
+    throw new Error(`${label} must use ${expectedProtocols} when OpenMRS is served over HTTPS`);
+  }
+
+  return endpoint;
+}
+
+function isLocalHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    hostname.endsWith('.localhost')
+  );
 }
