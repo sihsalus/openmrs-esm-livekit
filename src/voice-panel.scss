@@ -118,6 +118,43 @@
   align-items: center;
 }
 
+.agentFallback {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: layout.$spacing-04;
+  padding: layout.$spacing-04;
+  border-left: 3px solid var(--cds-support-warning);
+  background: var(--cds-layer-accent-01);
+
+  svg {
+    fill: var(--cds-support-warning);
+    flex-shrink: 0;
+  }
+
+  strong {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  p {
+    color: var(--cds-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    margin: layout.$spacing-01 0 0;
+  }
+
+  @media (max-width: 42rem) {
+    grid-template-columns: auto 1fr;
+
+    button {
+      grid-column: 2;
+      justify-self: start;
+    }
+  }
+}
+
 .visualizer {
   align-self: center;
   border-radius: 4px;
@@ -159,6 +196,14 @@
     font-weight: 600;
     margin: 0;
   }
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: layout.$spacing-03;
 }
 
 /* ---- Language controls ---- */
@@ -288,6 +333,68 @@
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
 }
 
+.reviewPanel {
+  display: grid;
+  gap: layout.$spacing-04;
+  padding: layout.$spacing-04;
+  background: var(--cds-layer-02);
+  border: 1px solid var(--cds-border-subtle-01);
+}
+
+.reviewBlock {
+  display: grid;
+  gap: layout.$spacing-03;
+
+  h6 {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    margin: 0;
+  }
+}
+
+.tagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: layout.$spacing-02;
+}
+
+.reviewList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--cds-border-subtle-01);
+  border: 1px solid var(--cds-border-subtle-01);
+}
+
+.reviewItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: layout.$spacing-03;
+  padding: layout.$spacing-03;
+  background: var(--cds-layer-01);
+
+  > div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+}
+
+.reviewKind {
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.reviewValue {
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
 /* ---- Privacy & health panels ---- */
 
 .bottomPanels {
@@ -319,6 +426,22 @@
   gap: layout.$spacing-03;
 }
 
+.healthGroup {
+  display: grid;
+  gap: layout.$spacing-03;
+
+  & + & {
+    margin-top: layout.$spacing-05;
+  }
+
+  h6 {
+    color: var(--cds-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin: 0;
+  }
+}
+
 .privacyItem {
   display: flex;
   align-items: center;
@@ -340,4 +463,20 @@
   justify-content: space-between;
   gap: layout.$spacing-03;
   font-size: 0.875rem;
+
+  > span {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  strong {
+    font-weight: 500;
+  }
+
+  small {
+    color: var(--cds-text-secondary);
+    font-size: 0.75rem;
+    line-height: 1.25;
+  }
 }

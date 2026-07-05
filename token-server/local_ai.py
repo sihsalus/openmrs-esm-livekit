@@ -36,6 +36,7 @@ OPENMRS_LOCATION_UUID = os.environ.get("OPENMRS_LOCATION_UUID", "").strip()
 OPENMRS_PROVIDER_UUID = os.environ.get("OPENMRS_PROVIDER_UUID", "").strip()
 OPENMRS_ENCOUNTER_ROLE_UUID = os.environ.get("OPENMRS_ENCOUNTER_ROLE_UUID", "").strip()
 OPENMRS_DRAFT_OBS_CONCEPT_UUID = os.environ.get("OPENMRS_DRAFT_OBS_CONCEPT_UUID", "").strip()
+OPENMRS_STRUCTURED_OBS_CONCEPTS = os.environ.get("OPENMRS_STRUCTURED_OBS_CONCEPTS", "").strip()
 OPENMRS_BASIC_AUTH = os.environ.get("OPENMRS_BASIC_AUTH", "").strip()
 OPENMRS_USERNAME = os.environ.get("OPENMRS_USERNAME", "").strip()
 OPENMRS_PASSWORD = os.environ.get("OPENMRS_PASSWORD", "")
@@ -144,6 +145,11 @@ def build_health_response(room_prefix: str) -> dict[str, Any]:
             "status": "ok" if ollama["status"] == "ok" else "fallback",
             "engine": "ollama" if ollama["status"] == "ok" else "heuristic",
             "contract": "POST /compile-encounter",
+        },
+        "agent": {
+            "status": "pending",
+            "roomPrefix": room_prefix,
+            "contract": "LiveKit data-channel topic agent-data",
         },
         "openmrsDraftWrite": _openmrs_write_status(),
         "syntheticData": {
@@ -504,6 +510,7 @@ def _build_encounter_payload(
     provider = _body_or_env(body, "providerUuid", OPENMRS_PROVIDER_UUID)
     encounter_role = _body_or_env(body, "encounterRoleUuid", OPENMRS_ENCOUNTER_ROLE_UUID)
     draft_obs_concept = _body_or_env(body, "draftObsConceptUuid", OPENMRS_DRAFT_OBS_CONCEPT_UUID)
+    structured_concepts = _structured_obs_concepts(body)
 
     payload: dict[str, Any] = {
         "encounterDatetime": encounter_datetime,
@@ -515,17 +522,94 @@ def _build_encounter_payload(
         payload["visit"] = body["visitUuid"]
     if provider and encounter_role:
         payload["encounterProviders"] = [{"provider": provider, "encounterRole": encounter_role}]
+
+    obs: list[dict[str, Any]] = []
     if draft_obs_concept:
-        payload["obs"] = [
+        obs.append(
             {
                 "concept": draft_obs_concept,
                 "obsDatetime": encounter_datetime,
                 "value": _draft_text(normalized, redacted_transcript),
                 "comment": "OpenMRS LiveKit AI draft. Clinician review required before relying on this note.",
             }
-        ]
+        )
+    obs.extend(_structured_obs(normalized, structured_concepts, encounter_datetime))
+    if obs:
+        payload["obs"] = obs
 
     return {key: value for key, value in payload.items() if value not in (None, "", [])}
+
+
+def _structured_obs_concepts(body: dict[str, Any]) -> dict[str, str]:
+    concepts: dict[str, str] = {}
+    env_concepts = _json_object(OPENMRS_STRUCTURED_OBS_CONCEPTS)
+    request_concepts = body.get("structuredObsConcepts")
+    if isinstance(env_concepts, dict):
+        concepts.update(_string_map(env_concepts))
+    if isinstance(request_concepts, dict):
+        concepts.update(_string_map(request_concepts))
+    return concepts
+
+
+def _structured_obs(
+    draft: dict[str, Any],
+    concepts: dict[str, str],
+    encounter_datetime: str,
+) -> list[dict[str, Any]]:
+    field_specs = [
+        ("chiefComplaint", ("chiefComplaint", "chiefComplaintConceptUuid"), False),
+        ("symptoms", ("symptoms", "symptom", "symptomConceptUuid"), True),
+        ("medicationsMentioned", ("medicationsMentioned", "medication", "medicationConceptUuid"), True),
+        ("allergiesMentioned", ("allergiesMentioned", "allergy", "allergyConceptUuid"), True),
+        ("assessmentNotes", ("assessmentNotes", "assessment", "assessmentConceptUuid"), False),
+        ("patientInstructions", ("patientInstructions", "instructions", "instructionsConceptUuid"), False),
+    ]
+    obs: list[dict[str, Any]] = []
+    for field, aliases, is_list in field_specs:
+        concept = _first_concept(concepts, aliases)
+        if not concept:
+            continue
+        values = _string_list(draft.get(field)) if is_list else [str(draft.get(field) or "").strip()]
+        for value in values:
+            if not value:
+                continue
+            obs.append(
+                {
+                    "concept": concept,
+                    "obsDatetime": encounter_datetime,
+                    "value": value,
+                    "comment": f"OpenMRS LiveKit structured draft field: {field}",
+                }
+            )
+    return obs
+
+
+def _first_concept(concepts: dict[str, str], aliases: tuple[str, ...]) -> str:
+    for alias in aliases:
+        value = concepts.get(alias)
+        if value:
+            return value
+    return ""
+
+
+def _json_object(value: str) -> dict[str, Any] | None:
+    if not value:
+        return None
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _string_map(value: dict[str, Any]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for key, item in value.items():
+        key_text = str(key).strip()
+        item_text = str(item).strip()
+        if key_text and item_text:
+            result[key_text] = item_text
+    return result
 
 
 def _openmrs_write_status() -> dict[str, Any]:
@@ -540,7 +624,11 @@ def _openmrs_write_status() -> dict[str, Any]:
         "status": status,
         "enabled": OPENMRS_DRAFT_WRITE_ENABLED,
         "requiredConfiguration": missing,
-        "optionalConfiguration": ["OPENMRS_PROVIDER_UUID", "OPENMRS_ENCOUNTER_ROLE_UUID"],
+        "optionalConfiguration": [
+            "OPENMRS_PROVIDER_UUID",
+            "OPENMRS_ENCOUNTER_ROLE_UUID",
+            "OPENMRS_STRUCTURED_OBS_CONCEPTS",
+        ],
         "contract": "POST /openmrs/draft",
         "restBase": f"{OPENMRS_BASE_URL}/ws/rest/v1",
     }
@@ -648,6 +736,13 @@ def _draft_text(draft: dict[str, Any], redacted_transcript: str | None) -> str:
         f"Assessment notes: {draft.get('assessmentNotes') or ''}",
         f"Patient instructions: {draft.get('patientInstructions') or ''}",
     ]
+    missing_fields = _string_list(draft.get("missingFields"))
+    review_queue = draft.get("reviewQueue") if isinstance(draft.get("reviewQueue"), list) else []
+    if missing_fields:
+        lines.append(f"Missing fields: {_list_text(missing_fields)}")
+    if review_queue:
+        lines.append("Review queue:")
+        lines.extend(f"- {_review_item_text(item)}" for item in review_queue if isinstance(item, dict))
     if redacted_transcript:
         lines.extend(["", "Redacted transcript excerpt:", str(redacted_transcript)[:2000]])
     return "\n".join(lines).strip()
@@ -657,6 +752,25 @@ def _list_text(value: Any) -> str:
     if isinstance(value, list):
         return ", ".join(str(item) for item in value if item)
     return str(value or "")
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if not value:
+        return []
+    return [str(value).strip()]
+
+
+def _review_item_text(item: dict[str, Any]) -> str:
+    kind = str(item.get("kind") or "fact")
+    value = str(item.get("value") or "").strip()
+    status = str(item.get("status") or "detected")
+    confidence = item.get("confidence")
+    confidence_text = ""
+    if isinstance(confidence, (int, float)):
+        confidence_text = f", confidence {round(float(confidence) * 100)}%"
+    return f"{kind}: {value} ({status}{confidence_text})"
 
 
 def _openmrs_datetime() -> str:
@@ -715,9 +829,12 @@ def _normalize_draft(draft: dict[str, Any]) -> dict[str, Any]:
     for key in DRAFT_KEYS:
         value = draft.get(key)
         if key.endswith("Mentioned") or key == "symptoms":
-            normalized[key] = value if isinstance(value, list) else ([] if not value else [str(value)])
+            normalized[key] = _string_list(value)
         else:
             normalized[key] = "" if value is None else str(value)
+    normalized["missingFields"] = _string_list(draft.get("missingFields"))
+    normalized["reviewQueue"] = draft.get("reviewQueue") if isinstance(draft.get("reviewQueue"), list) else []
+    normalized["clinicianReviewRequired"] = bool(draft.get("clinicianReviewRequired", True))
     return normalized
 
 

@@ -178,4 +178,40 @@ describe('parseAgentDataPayload', () => {
       ),
     ).toBeNull();
   });
+
+  it('rejects drafts with malformed review metadata', () => {
+    expect(
+      parseAgentDataPayload(
+        encode({
+          type: 'draft',
+          payload: {
+            chiefComplaint: 'Cough',
+            symptoms: ['cough'],
+            medicationsMentioned: [],
+            allergiesMentioned: [],
+            assessmentNotes: 'Needs clinician review.',
+            patientInstructions: 'Return if symptoms worsen.',
+            reviewQueue: [{ kind: 'symptom', value: 'cough', confidence: 'high', status: 'detected' }],
+          },
+        }),
+      ),
+    ).toBeNull();
+
+    expect(
+      parseAgentDataPayload(
+        encode({
+          type: 'draft',
+          payload: {
+            chiefComplaint: 'Cough',
+            symptoms: ['cough'],
+            medicationsMentioned: [],
+            allergiesMentioned: [],
+            assessmentNotes: 'Needs clinician review.',
+            patientInstructions: 'Return if symptoms worsen.',
+            missingFields: ['oxygen saturation', 42],
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
 });

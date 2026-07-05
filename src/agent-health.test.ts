@@ -16,6 +16,7 @@ describe('agent health normalization', () => {
         services: {
           livekit: { status: 'ok' },
           tokenServer: { status: 'ok' },
+          agent: { status: 'ok' },
           openmrs: { status: 'ok' },
           stt: { status: 'configured' },
           tts: { status: 'configured' },
@@ -26,6 +27,7 @@ describe('agent health normalization', () => {
     ).toEqual({
       livekit: 'ok',
       tokenServer: 'ok',
+      agent: 'ok',
       openmrs: 'ok',
       stt: 'ok',
       tts: 'ok',
@@ -39,6 +41,7 @@ describe('agent health normalization', () => {
         services: {
           livekit: { status: 'ok' },
           tokenServer: { status: 'ok' },
+          livekitAgent: { status: 'unreachable' },
           openmrs: { status: 'unreachable' },
           stt: { status: 'not_configured' },
           tts: { status: 'configured' },
@@ -46,6 +49,7 @@ describe('agent health normalization', () => {
         },
       }),
     ).toMatchObject({
+      agent: 'error',
       openmrs: 'error',
       stt: 'pending',
       tts: 'ok',
