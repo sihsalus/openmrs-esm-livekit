@@ -85,6 +85,78 @@ describe('parseAgentDataPayload', () => {
     });
   });
 
+  it('accepts the real agent draft payload emitted after a clinical fact is recorded', () => {
+    expect(
+      parseAgentDataPayload(
+        encode({
+          type: 'draft',
+          payload: {
+            patientUuid: 'patient-uuid',
+            chiefComplaint: 'Persistent cough',
+            symptoms: ['Persistent cough'],
+            medicationsMentioned: ['Paracetamol'],
+            allergiesMentioned: ['No known drug allergies'],
+            assessmentNotes:
+              'diagnosis: Clinician suspects viral upper respiratory infection\nClinician review required before saving to OpenMRS.',
+            patientInstructions: 'No patient instructions recorded. Clinician review required.',
+            facts: [
+              {
+                kind: 'chief_complaint',
+                value: 'Persistent cough',
+                confidence: 0.96,
+                status: 'detected',
+                needsReview: true,
+              },
+            ],
+            reviewQueue: [
+              {
+                kind: 'chief_complaint',
+                value: 'Persistent cough',
+                confidence: 0.96,
+                status: 'detected',
+                needsReview: true,
+              },
+            ],
+            missingFields: [],
+            clinicianReviewRequired: true,
+          },
+        }),
+      ),
+    ).toEqual({
+      type: 'draft',
+      draft: {
+        patientUuid: 'patient-uuid',
+        chiefComplaint: 'Persistent cough',
+        symptoms: ['Persistent cough'],
+        medicationsMentioned: ['Paracetamol'],
+        allergiesMentioned: ['No known drug allergies'],
+        assessmentNotes:
+          'diagnosis: Clinician suspects viral upper respiratory infection\nClinician review required before saving to OpenMRS.',
+        patientInstructions: 'No patient instructions recorded. Clinician review required.',
+        facts: [
+          {
+            kind: 'chief_complaint',
+            value: 'Persistent cough',
+            confidence: 0.96,
+            status: 'detected',
+            needsReview: true,
+          },
+        ],
+        reviewQueue: [
+          {
+            kind: 'chief_complaint',
+            value: 'Persistent cough',
+            confidence: 0.96,
+            status: 'detected',
+            needsReview: true,
+          },
+        ],
+        missingFields: [],
+        clinicianReviewRequired: true,
+      },
+    });
+  });
+
   it('ignores malformed JSON and invalid transcript payloads', () => {
     expect(parseAgentDataPayload(new TextEncoder().encode('{'))).toBeNull();
     expect(
