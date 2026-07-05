@@ -3,16 +3,7 @@ import { Tag, SkeletonText } from '@carbon/react';
 import { openmrsFetch, usePatient } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
 import styles from './patient-context.scss';
-
-interface FhirEntry {
-  resource: Record<string, unknown>;
-}
-
-interface PatientSummary {
-  conditions: string[];
-  allergies: string[];
-  medications: string[];
-}
+import { buildPatientContextPaths, buildPatientSummary, FhirEntry, PatientSummary } from './patient-context';
 
 const PatientContext: React.FC = () => {
   const { t } = useTranslation();
@@ -29,19 +20,16 @@ const PatientContext: React.FC = () => {
 
     let cancelled = false;
     setLoading(true);
+    const paths = buildPatientContextPaths(patient.id);
 
     Promise.all([
-      fetchFhirList(`/ws/fhir2/R4/Condition?patient=${patient.id}&_count=20`),
-      fetchFhirList(`/ws/fhir2/R4/AllergyIntolerance?patient=${patient.id}&_count=20`),
-      fetchFhirList(`/ws/fhir2/R4/MedicationRequest?patient=${patient.id}&status=active&_count=20`),
+      fetchFhirList(paths.conditions),
+      fetchFhirList(paths.allergies),
+      fetchFhirList(paths.medications),
     ])
       .then(([conditions, allergies, medications]) => {
         if (cancelled) return;
-        setSummary({
-          conditions: conditions.map(extractConditionDisplay),
-          allergies: allergies.map(extractAllergyDisplay),
-          medications: medications.map(extractMedicationDisplay),
-        });
+        setSummary(buildPatientSummary(conditions, allergies, medications));
       })
       .catch(() => {
         if (!cancelled) {
@@ -138,29 +126,6 @@ async function fetchFhirList(path: string): Promise<FhirEntry[]> {
   } catch {
     return [];
   }
-}
-
-function extractConditionDisplay(entry: FhirEntry): string {
-  const r = entry.resource as Record<string, unknown>;
-  const code = r.code as { coding?: Array<{ display?: string }>; text?: string } | undefined;
-  return code?.text || code?.coding?.[0]?.display || 'Unknown condition';
-}
-
-function extractAllergyDisplay(entry: FhirEntry): string {
-  const r = entry.resource as Record<string, unknown>;
-  const code = r.code as { coding?: Array<{ display?: string }>; text?: string } | undefined;
-  return code?.text || code?.coding?.[0]?.display || 'Unknown allergy';
-}
-
-function extractMedicationDisplay(entry: FhirEntry): string {
-  const r = entry.resource as Record<string, unknown>;
-  const medCode = r.medicationCodeableConcept as
-    | {
-        coding?: Array<{ display?: string }>;
-        text?: string;
-      }
-    | undefined;
-  return medCode?.text || medCode?.coding?.[0]?.display || 'Unknown medication';
 }
 
 export default PatientContext;

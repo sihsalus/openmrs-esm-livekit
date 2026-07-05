@@ -117,6 +117,28 @@ If both variables are missing, the helper falls back to LiveKit development defa
 environment. `/health` will report this as `services.livekitTokenSigning.status:
 "dev_default"`.
 
+When `LIVEKIT_HTTP_URL` is configured, the helper also performs a best-effort
+LiveKit room metadata sync before returning the browser token:
+
+```bash
+LIVEKIT_HTTP_URL=http://livekit:7880
+```
+
+The metadata payload intentionally stays minimal:
+
+```json
+{
+  "patientUuid": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
+  "roomPrefix": "iot-device-",
+  "source": "openmrs-livekit-token-server"
+}
+```
+
+If the LiveKit room already exists, the helper updates room metadata instead of
+failing the token request. If metadata sync fails, `/token` still returns the
+browser token and includes `roomMetadata.status: "error"` so the demo can
+continue while logs expose the missing metadata path.
+
 ```json
 {
   "patientUuid": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",

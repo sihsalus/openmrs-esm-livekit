@@ -126,10 +126,38 @@ class FakeOllamaHandler(BaseHTTPRequestHandler):
 
 
 class FakeLiveKitHandler(BaseHTTPRequestHandler):
+    room_requests: list[dict[str, Any]] = []
+
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"ok")
+
+    def do_POST(self):
+        if self.path.startswith("/twirp/livekit.RoomService/"):
+            payload = self.read_json()
+            self.room_requests.append(
+                {
+                    "path": self.path,
+                    "payload": payload,
+                    "authorization": self.headers.get("Authorization"),
+                }
+            )
+            self.send_json({})
+            return
+        self.send_json({"error": "not found", "path": self.path}, status=404)
+
+    def read_json(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length", 0))
+        if not length:
+            return {}
+        return json.loads(self.rfile.read(length).decode("utf-8"))
+
+    def send_json(self, payload: dict[str, Any], status: int = 200):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(payload).encode("utf-8"))
 
     def log_message(self, *_args):
         return
@@ -194,6 +222,7 @@ class TokenServerE2ETest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         FakeOpenMRSHandler.encounter_payloads = []
+        FakeLiveKitHandler.room_requests = []
         cls.openmrs_server, cls.openmrs_url = start_server(FakeOpenMRSHandler)
         cls.ollama_server, cls.ollama_url = start_server(FakeOllamaHandler)
         cls.livekit_server, cls.livekit_url = start_server(FakeLiveKitHandler)
@@ -271,6 +300,7 @@ class TokenServerE2ETest(unittest.TestCase):
         payload, _response = request_json(self.base_url, "/health")
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["services"]["livekitTokenSigning"]["status"], "configured")
+        self.assertEqual(payload["services"]["livekitRoomMetadata"]["status"], "configured")
         self.assertEqual(payload["services"]["cors"]["status"], "configured")
         self.assertEqual(payload["services"]["cors"]["allowedOrigins"], ["https://openmrs.test"])
         self.assertEqual(payload["services"]["productionReadiness"]["status"], "enforced")
@@ -297,6 +327,7 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["contentType"], "text/html")
 
     def test_token_is_hmac_signed_and_does_not_expose_secret(self):
+        FakeLiveKitHandler.room_requests = []
         payload, _response = request_json(
             self.base_url,
             "/token",
@@ -319,8 +350,19 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(claims["iss"], "test-key")
         self.assertEqual(claims["video"]["room"], payload["roomName"])
         self.assertEqual(claims["video"]["roomJoin"], True)
+        self.assertEqual(json.loads(claims["metadata"])["patientUuid"], "patient-123")
         self.assertEqual(signature_part, expected_signature)
         self.assertNotIn("test-secret", token)
+        self.assertEqual(payload["roomMetadata"]["status"], "ok")
+
+        self.assertEqual(len(FakeLiveKitHandler.room_requests), 1)
+        room_request = FakeLiveKitHandler.room_requests[0]
+        self.assertEqual(room_request["path"], "/twirp/livekit.RoomService/CreateRoom")
+        self.assertTrue(room_request["authorization"].startswith("Bearer "))
+        self.assertEqual(room_request["payload"]["name"], payload["roomName"])
+        room_metadata = json.loads(room_request["payload"]["metadata"])
+        self.assertEqual(room_metadata["patientUuid"], "patient-123")
+        self.assertEqual(room_metadata["roomPrefix"], "openmrs-room-")
 
     def test_compile_encounter_redacts_phi_and_uses_local_ollama_contract(self):
         payload, _response = request_json(

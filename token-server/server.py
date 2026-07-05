@@ -14,6 +14,8 @@ import json
 import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from urllib.parse import urlparse
 
 try:
@@ -65,6 +67,10 @@ API_KEY = os.environ.get("LIVEKIT_API_KEY", DEFAULT_DEV_API_KEY)
 API_SECRET = os.environ.get("LIVEKIT_API_SECRET", DEFAULT_DEV_API_SECRET)
 PORT = int(os.environ.get("TOKEN_SERVER_PORT", "7890"))
 ROOM_PREFIX = os.environ.get("LIVEKIT_ROOM_PREFIX", "iot-device-")
+LIVEKIT_HTTP_URL = os.environ.get("LIVEKIT_HTTP_URL", "").strip().rstrip("/")
+LIVEKIT_ROOM_METADATA_TIMEOUT_SECONDS = float(
+    os.environ.get("LIVEKIT_ROOM_METADATA_TIMEOUT_SECONDS", "2")
+)
 TOKEN_SERVER_ENV = os.environ.get("TOKEN_SERVER_ENV", "development").strip().lower()
 REQUIRE_PRODUCTION_CONFIG = TOKEN_SERVER_ENV in PRODUCTION_ENVIRONMENTS or env_flag(
     "TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG"
@@ -74,7 +80,11 @@ ALLOWED_ORIGINS = parse_allowed_origins(
 )
 
 
-def create_token(room_name: str, identity: str) -> str:
+def create_token(
+    room_name: str,
+    identity: str,
+    participant_metadata: dict | None = None,
+) -> str:
     now = int(time.time())
     claims = {
         "iss": API_KEY,
@@ -89,7 +99,7 @@ def create_token(room_name: str, identity: str) -> str:
             "canSubscribe": True,
             "canPublishData": True,
         },
-        "metadata": json.dumps({"role": "clinician"}),
+        "metadata": json.dumps(participant_metadata or {"role": "clinician"}),
     }
     headers = {"kid": API_KEY}
     if jwt:
@@ -177,8 +187,16 @@ class TokenHandler(BaseHTTPRequestHandler):
             room_name = f"{room_prefix}{sanitize_room_part(room_name)}"
         identity = f"clinician-{int(time.time())}"
 
-        token = create_token(room_name, identity)
-        self._send_json({"token": token, "roomName": room_name})
+        room_metadata = build_room_metadata(patient_uuid, room_prefix)
+        metadata_result = sync_livekit_room_metadata(room_name, room_metadata)
+        token = create_token(
+            room_name,
+            identity,
+            {"role": "clinician", "patientUuid": patient_uuid},
+        )
+        self._send_json(
+            {"token": token, "roomName": room_name, "roomMetadata": metadata_result}
+        )
 
     def _path(self):
         return self.path.split("?", 1)[0]
@@ -233,10 +251,109 @@ def sanitize_room_prefix(value: str) -> str:
     return prefix or ROOM_PREFIX
 
 
+def build_room_metadata(patient_uuid: str, room_prefix: str) -> dict:
+    return {
+        "patientUuid": patient_uuid,
+        "roomPrefix": room_prefix,
+        "source": "openmrs-livekit-token-server",
+    }
+
+
+def sync_livekit_room_metadata(room_name: str, metadata: dict) -> dict:
+    if not LIVEKIT_HTTP_URL:
+        return {"status": "skipped", "reason": "livekit_http_url_not_configured"}
+
+    metadata_json = json.dumps(metadata, separators=(",", ":"))
+    try:
+        post_livekit_room_service(
+            "CreateRoom",
+            {
+                "name": room_name,
+                "metadata": metadata_json,
+            },
+        )
+        print(f"[token-server] LiveKit room metadata created for {room_name}")
+        return {"status": "ok", "operation": "create"}
+    except urllib_error.HTTPError as error:
+        body = read_http_error_body(error)
+        if error.code == 409 or "already" in body.lower():
+            try:
+                post_livekit_room_service(
+                    "UpdateRoomMetadata",
+                    {
+                        "room": room_name,
+                        "metadata": metadata_json,
+                    },
+                )
+                print(f"[token-server] LiveKit room metadata updated for {room_name}")
+                return {"status": "ok", "operation": "update"}
+            except Exception as update_error:
+                print(
+                    "[token-server] LiveKit room metadata update failed: "
+                    f"{type(update_error).__name__}: {update_error}"
+                )
+                return {"status": "error", "operation": "update", "error": str(update_error)}
+        print(
+            "[token-server] LiveKit room metadata create failed: "
+            f"HTTP {error.code} {body[:180]}"
+        )
+        return {"status": "error", "operation": "create", "httpStatus": error.code}
+    except Exception as error:
+        print(
+            "[token-server] LiveKit room metadata sync failed: "
+            f"{type(error).__name__}: {error}"
+        )
+        return {"status": "error", "operation": "create", "error": str(error)}
+
+
+def post_livekit_room_service(method: str, payload: dict) -> None:
+    url = f"{LIVEKIT_HTTP_URL}/twirp/livekit.RoomService/{method}"
+    request = urllib_request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {create_room_admin_token(payload.get('room') or payload.get('name') or '')}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib_request.urlopen(request, timeout=LIVEKIT_ROOM_METADATA_TIMEOUT_SECONDS) as response:
+        response.read()
+
+
+def create_room_admin_token(room_name: str) -> str:
+    now = int(time.time())
+    claims = {
+        "iss": API_KEY,
+        "sub": f"token-server-{now}",
+        "iat": now,
+        "nbf": now,
+        "exp": now + 60,
+        "video": {
+            "room": room_name,
+            "roomAdmin": True,
+            "roomCreate": True,
+        },
+    }
+    headers = {"kid": API_KEY}
+    if jwt:
+        token = jwt.encode(claims, API_SECRET, algorithm="HS256", headers=headers)
+        return token.decode("ascii") if isinstance(token, bytes) else token
+    return encode_hs256_jwt(claims, API_SECRET, headers)
+
+
+def read_http_error_body(error: urllib_error.HTTPError) -> str:
+    try:
+        return error.read().decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
 def build_token_server_health() -> dict:
     payload = build_health_response(ROOM_PREFIX)
     services = payload.setdefault("services", {})
     services["livekitTokenSigning"] = livekit_token_signing_status()
+    services["livekitRoomMetadata"] = livekit_room_metadata_status()
     services["cors"] = cors_status()
     services["productionReadiness"] = production_readiness_status()
     for warning in token_server_warnings():
@@ -257,6 +374,14 @@ def livekit_token_signing_status() -> dict:
         "apiKeyConfigured": LIVEKIT_API_KEY_CONFIGURED,
         "apiSecretConfigured": LIVEKIT_API_SECRET_CONFIGURED,
         "usesDevDefaults": status != "configured",
+    }
+
+
+def livekit_room_metadata_status() -> dict:
+    return {
+        "status": "configured" if LIVEKIT_HTTP_URL else "disabled",
+        "livekitHttpUrlConfigured": bool(LIVEKIT_HTTP_URL),
+        "contract": "Best-effort LiveKit room metadata with patientUuid and roomPrefix",
     }
 
 
