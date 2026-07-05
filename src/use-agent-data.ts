@@ -44,6 +44,8 @@ export type ParsedAgentData =
   | { type: 'error'; error: string }
   | null;
 
+export const agentDataTopic = 'agent-data';
+
 const maxTranscripts = 100;
 
 export function useAgentData() {
@@ -61,30 +63,34 @@ export function useAgentData() {
     };
   }, []);
 
-  const handleData = useCallback((payload: Uint8Array, participant: unknown, kind: DataPacket_Kind) => {
-    if (!mounted.current) return;
-    const parsed = parseAgentDataPayload(payload);
-    if (!parsed) return;
+  const handleData = useCallback(
+    (payload: Uint8Array, participant: unknown, kind: DataPacket_Kind, topic?: string) => {
+      if (!mounted.current) return;
+      if (!isAgentDataTopic(topic)) return;
+      const parsed = parseAgentDataPayload(payload);
+      if (!parsed) return;
 
-    switch (parsed.type) {
-      case 'transcript': {
-        setTranscripts((prev) => [...prev.slice(-(maxTranscripts - 1)), parsed.transcript]);
-        break;
+      switch (parsed.type) {
+        case 'transcript': {
+          setTranscripts((prev) => [...prev.slice(-(maxTranscripts - 1)), parsed.transcript]);
+          break;
+        }
+        case 'draft': {
+          setAgentDraft(parsed.draft);
+          break;
+        }
+        case 'status': {
+          setAgentStatus(parsed.status);
+          break;
+        }
+        case 'error': {
+          setAgentError(parsed.error);
+          break;
+        }
       }
-      case 'draft': {
-        setAgentDraft(parsed.draft);
-        break;
-      }
-      case 'status': {
-        setAgentStatus(parsed.status);
-        break;
-      }
-      case 'error': {
-        setAgentError(parsed.error);
-        break;
-      }
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!room) return;
@@ -108,6 +114,10 @@ export function useAgentData() {
     agentError,
     clearTranscripts,
   };
+}
+
+export function isAgentDataTopic(topic: string | undefined): boolean {
+  return topic === agentDataTopic;
 }
 
 export function parseAgentDataPayload(payload: Uint8Array, now: () => number = Date.now): ParsedAgentData {
