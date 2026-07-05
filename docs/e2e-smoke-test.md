@@ -128,6 +128,44 @@ The expected demo logging posture is metadata and operational status only.
 Helper and agent logs must not include raw transcript text, draft text, or
 unredacted patient identifiers.
 
+### Known Weakness Validation
+
+Room metadata validation:
+
+```bash
+docker logs openmrs-distro-referenceapplication-livekit-helper-1 \
+  | grep -E "LiveKit room metadata (created|updated)"
+docker logs openmrs-distro-referenceapplication-livekit-agent-cpu-1 \
+  | grep -E "Metadata parsed|Room metadata derived from room name|Room metadata empty"
+```
+
+Expected result:
+
+- Helper logs `LiveKit room metadata created` or `updated` for rooms opened
+  from the OpenMRS microfrontend when `LIVEKIT_HTTP_URL` is configured.
+- Agent logs `Metadata parsed` when LiveKit room metadata is available.
+- Agent may log `Room metadata derived from room name` as a non-blocking
+  fallback for rooms named with the configured prefix, for example
+  `iot-device-<patientUuid>`.
+- `Room metadata empty` should only appear for rooms that do not match the
+  configured agent room prefix or cannot expose a patient UUID safely.
+
+OpenMRS base FHIR MedicationRequest validation:
+
+```bash
+curl -I "$OPENMRS_BASE_URL/ws/fhir2/R4/MedicationRequest?patient=<uuid>&_count=20"
+curl -I "$OPENMRS_BASE_URL/ws/fhir2/R4/MedicationRequest?patient=<uuid>&status=active&_count=20"
+```
+
+Expected result:
+
+- The first request should return `200`.
+- On the observed OpenMRS base distro with `fhir2-api-4.1.0`, the second
+  request can return `500` due to a backend `NullPointerException`.
+- The microfrontend avoids that backend bug by fetching MedicationRequest
+  without the `status` search parameter and filtering `status === "active"`
+  locally.
+
 ## Go / No-Go Criteria
 
 Go for hackathon demo only if all are true:
