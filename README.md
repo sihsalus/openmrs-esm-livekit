@@ -83,6 +83,10 @@ LIVEKIT_API_SECRET=<site-livekit-api-secret>
 Production mode fails fast if LiveKit signing credentials or the CORS allowlist
 are missing.
 
+The helper also creates local draft and recording manifest files with owner-only
+permissions (`0600`). That is enough for a semi-production demo host, but not a
+replacement for encrypted storage in a regulated deployment.
+
 ## Configuration
 
 The OpenMRS module config schema exposes:

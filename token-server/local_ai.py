@@ -163,6 +163,13 @@ def build_health_response(room_prefix: str) -> dict[str, Any]:
             "rawAudioStoredByDefault": False,
             "egressConfigured": bool(os.environ.get("LIVEKIT_EGRESS_URL")),
         },
+        "localStorage": {
+            "status": "private_files",
+            "draftStorePath": DRAFT_STORE_PATH,
+            "recordingManifestPath": RECORDING_MANIFEST_PATH,
+            "fileMode": "0600",
+            "contract": "Local JSONL queues are created or tightened with owner-only permissions.",
+        },
     }
     core_ok = all(services[name]["status"] == "ok" for name in ("livekit", "openmrs", "ollama"))
 
@@ -327,8 +334,7 @@ def recording_session(body: dict[str, Any]) -> dict[str, Any]:
         "retention": body.get("retention") or "demo-session-only",
         "source": "openmrs-livekit-local-ai",
     }
-    with open(RECORDING_MANIFEST_PATH, "a", encoding="utf-8") as file:
-        file.write(json.dumps(record, ensure_ascii=True) + "\n")
+    append_private_jsonl(RECORDING_MANIFEST_PATH, record)
 
     return {
         "status": "queued",
@@ -358,8 +364,7 @@ def queue_openmrs_draft(body: dict[str, Any], context: dict[str, Any] | None = N
     if openmrs.get("encounterUuid"):
         record["encounterUuid"] = openmrs["encounterUuid"]
 
-    with open(DRAFT_STORE_PATH, "a", encoding="utf-8") as file:
-        file.write(json.dumps(record, ensure_ascii=True) + "\n")
+    append_private_jsonl(DRAFT_STORE_PATH, record)
 
     saved = openmrs["writeStatus"] == "created"
     return {
@@ -497,6 +502,22 @@ def redact_phi(text: str, names: list[Any] | None = None) -> str:
     for pattern, replacement in replacements:
         result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
     return result
+
+
+def append_private_jsonl(path: str, record: dict[str, Any]) -> None:
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as file:
+            fd = -1
+            file.write(json.dumps(record, ensure_ascii=True) + "\n")
+    finally:
+        if fd != -1:
+            os.close(fd)
 
 
 def _build_encounter_payload(
