@@ -1,0 +1,132 @@
+# End-to-End Smoke Test
+
+This checklist is the minimum bar before presenting the prototype as tested in
+a real environment. It complements automated unit and contract tests; it does
+not make the project production-ready by itself.
+
+## Automated Helper Smoke
+
+Start the helper with the same environment used by the demo:
+
+```bash
+LIVEKIT_API_KEY=<key> LIVEKIT_API_SECRET=<secret> python3 token-server/server.py
+```
+
+Run the smoke test against the helper:
+
+```bash
+yarn test:smoke:token-server
+```
+
+For a remote helper:
+
+```bash
+TOKEN_SERVER_SMOKE_URL=https://helper.example.org yarn test:smoke:token-server
+```
+
+The smoke test verifies:
+
+- `/health` reports the agent data-channel contract.
+- `/token` returns an HS256 LiveKit JWT with a room-scoped join grant.
+- `/compile-encounter` redacts name, email, phone, local document IDs, and
+  OpenMRS ID values.
+- `/synthetic-consultation` returns synthetic, redacted demo data.
+- `/openmrs/draft` queues a clinician-reviewed draft without writing to OpenMRS.
+
+## Real Environment Preflight
+
+Use only synthetic patient data.
+
+Record these values before the browser smoke:
+
+```text
+OpenMRS URL:
+LiveKit WebSocket URL:
+Token endpoint:
+Agent command/container:
+Room prefix:
+Synthetic patient UUID:
+OpenMRS encounter type UUID:
+OpenMRS location UUID:
+Draft obs concept UUID:
+```
+
+Required preflight checks:
+
+1. OpenMRS is served over HTTPS, or every service is localhost-only.
+2. `livekitServerUrl` is `wss://` for shared environments.
+3. `tokenEndpoint` is `https://` for shared environments.
+4. Helper runs with `TOKEN_SERVER_ENV=production` or
+   `TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG=true` for shared demos.
+5. Helper `/health` shows configured LiveKit token signing and a non-permissive
+   CORS allowlist for the OpenMRS browser origin.
+6. Frontend `roomPrefix`, helper `LIVEKIT_ROOM_PREFIX`, and agent
+   `LIVEKIT_ROOM_PREFIX` match exactly.
+7. Agent process is running with the intended STT, LLM, and TTS providers.
+8. Browser microphone permission is granted and visible in the browser site
+   settings.
+
+## Manual Browser Smoke
+
+1. Open a synthetic patient chart and launch the LiveKit voice panel.
+2. Confirm the health panel shows LiveKit, token server, local storage, agent,
+   OpenMRS, and draft write readiness.
+3. Confirm the agent publishes an `agent_connected` or `agent_listening` status
+   on the `agent-data` data-channel topic before the first transcript.
+4. Speak this synthetic utterance through the browser microphone:
+
+   ```text
+   Paciente: Maria Fernanda Quispe, H.C. A-998877, vive en Av. Los Incas 123.
+   Tiene tos seca desde hace cinco dias. Niega alergias a medicamentos.
+   Toma paracetamol 500 mg cada ocho horas.
+   ```
+
+5. Confirm the live transcript arrives on the `agent-data` data-channel topic.
+6. Confirm patient identifiers are redacted before display or draft persistence:
+   `Maria Fernanda Quispe`, `A-998877`, and `Av. Los Incas 123` must not appear
+   in frontend transcript text, stored evidence snippets, queued draft text, or
+   helper logs.
+7. Confirm negation is preserved: `niega alergias` must not become a positive
+   allergy.
+8. Confirm medication and dose are preserved for review:
+   `paracetamol 500 mg cada ocho horas`.
+9. Confirm the draft shows missing fields and review queue items.
+10. Queue the draft and verify no OpenMRS write occurs unless explicitly enabled.
+11. If write mode is enabled, verify the created encounter uses the expected patient,
+    encounter type, location, provider, role, and concept UUIDs.
+12. Reload the patient chart and verify the saved/queued draft state is
+    explainable to a clinician reviewer.
+
+## Go / No-Go Criteria
+
+Go for hackathon demo only if all are true:
+
+- Browser joins the room without mixed-content errors.
+- Microphone publishes audio and the agent receives it.
+- Agent publishes readiness status over `agent-data`.
+- At least one transcript and one draft arrive in the frontend.
+- Synthetic identifiers are redacted before display or persistence.
+- Draft remains reviewable and does not write to OpenMRS unless explicitly
+  enabled.
+- If OpenMRS write is enabled, the encounter appears under the synthetic
+  patient with the configured metadata and concept UUIDs.
+
+No-go if any are true:
+
+- Browser requires cleartext `ws://` or `http://` outside localhost.
+- Token server accepts an unexpected browser origin in shared environments.
+- Agent joins a different room prefix than the frontend.
+- Raw synthetic identifiers appear in transcript, draft, logs, or JSONL queues.
+- `niega alergias` becomes a positive allergy.
+- OpenMRS write occurs without explicit operator action and configuration.
+
+## Not Covered
+
+- Browser-to-agent media quality across real clinic networks.
+- LiveKit SFU TLS termination and certificate rotation.
+- Application-level end-to-end media encryption.
+- Encryption at rest for queued drafts, transcripts, logs, or recording manifests.
+- Full OpenMRS role-based access review.
+- Clinical validation by a clinician.
+- Local clinical NER with site dictionaries. Current redaction is deterministic
+  pattern matching with local Spanish healthcare identifiers.
