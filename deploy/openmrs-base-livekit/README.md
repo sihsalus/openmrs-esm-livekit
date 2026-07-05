@@ -19,6 +19,18 @@ AUDIT_HASH_SALT=<site-managed-random-salt>
 OPENMRS_PASSWORD=<openmrs-admin-password>
 ```
 
+The OpenMRS frontend assembly installs the microfrontend from npm. Set
+`OPENMRS_LIVEKIT_FRONTEND_VERSION` to the published package version that
+contains the commit you want to deploy:
+
+```bash
+OPENMRS_LIVEKIT_FRONTEND_VERSION=0.1.8
+```
+
+If the current source has not been published to npm yet, build the local bundle
+and update the OpenMRS importmap as a temporary hotfix instead of relying on the
+assembly version.
+
 Optional CPU-only AI settings:
 
 ```bash
