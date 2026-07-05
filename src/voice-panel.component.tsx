@@ -698,7 +698,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                 >
                   {draftSaving
                     ? t('savingDraft', 'Saving draft...')
-                    : t('saveDraft', 'Save draft to OpenMRS')}
+                    : t('saveDraft', 'Queue / save draft')}
                 </Button>
               )}
             </div>
@@ -850,6 +850,26 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                   <HealthRow label="STT" status={health.stt} />
                   <HealthRow label="TTS" status={health.tts} />
                   <HealthRow label="LLM" status={health.llm} />
+                </ul>
+              </div>
+              <div className={styles.healthGroup}>
+                <h6>{t('deploymentReadiness', 'Deployment readiness')}</h6>
+                <ul className={styles.healthList}>
+                  <HealthRow
+                    label={t('productionGate', 'Production gate')}
+                    status={health.productionReadiness}
+                    detail={t('productionGateDetail', 'Rejects unsafe shared deployment config')}
+                  />
+                  <HealthRow
+                    label="CORS"
+                    status={health.cors}
+                    detail={t('corsHealthDetail', 'Browser origin allowlist')}
+                  />
+                  <HealthRow
+                    label={t('localStorage', 'Local storage')}
+                    status={health.localStorage}
+                    detail={t('localStorageHealthDetail', 'Draft and manifest files are owner-only')}
+                  />
                 </ul>
               </div>
             </div>
