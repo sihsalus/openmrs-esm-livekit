@@ -294,7 +294,12 @@ class TokenServerE2ETest(unittest.TestCase):
             "/compile-encounter",
             {
                 "patientName": "Sofia Demo",
-                "transcript": "Sofia Demo email sofia@example.test phone +51 999 888 777 OpenMRS ID: 100008E has cough and fever.",
+                "transcript": (
+                    "Sofia Demo email sofia@example.test phone +51 999 888 777 "
+                    "OpenMRS ID: 100008E has cough and fever. "
+                    "Paciente: Maria Fernanda Quispe. H.C. A-998877. "
+                    "Direccion Av. Los Incas 123, Cusco. Control el 5 de julio de 2026."
+                ),
             },
         )
         self.assertEqual(payload["engine"], "ollama")
@@ -302,6 +307,12 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertIn("[REDACTED_EMAIL]", payload["redactedTranscript"])
         self.assertIn("[REDACTED_PHONE]", payload["redactedTranscript"])
         self.assertIn("[REDACTED_ID]", payload["redactedTranscript"])
+        self.assertIn("[REDACTED_ADDRESS]", payload["redactedTranscript"])
+        self.assertIn("[REDACTED_DATE]", payload["redactedTranscript"])
+        self.assertNotIn("Maria Fernanda Quispe", payload["redactedTranscript"])
+        self.assertNotIn("A-998877", payload["redactedTranscript"])
+        self.assertNotIn("Av. Los Incas 123", payload["redactedTranscript"])
+        self.assertNotIn("5 de julio de 2026", payload["redactedTranscript"])
         self.assertEqual(payload["draft"]["symptoms"], ["cough", "fever"])
 
     def test_synthetic_consultation_generates_safe_draft_request(self):
