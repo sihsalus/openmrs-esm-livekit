@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import os
 import subprocess
@@ -141,6 +143,15 @@ def request_json(base_url: str, path: str, payload: dict[str, Any] | None = None
         return json.loads(response.read().decode("utf-8")), response
 
 
+def decode_jwt_json(part: str) -> dict[str, Any]:
+    padding = "=" * (-len(part) % 4)
+    return json.loads(base64.urlsafe_b64decode(f"{part}{padding}").decode("utf-8"))
+
+
+def base64url_bytes(payload: bytes) -> str:
+    return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
+
+
 class TokenServerE2ETest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -222,6 +233,32 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["services"]["openmrsDraftWrite"]["status"], "configured")
         self.assertIn("pediatric-respiratory", payload["services"]["syntheticData"]["cases"])
         self.assertEqual(payload["services"]["recording"]["status"], "manifest_only")
+
+    def test_token_is_hmac_signed_and_does_not_expose_secret(self):
+        payload, _response = request_json(
+            self.base_url,
+            "/token",
+            {"patientUuid": "patient-123", "roomPrefix": "openmrs-room-"},
+        )
+        token = payload["token"]
+        header_part, claims_part, signature_part = token.split(".")
+        header = decode_jwt_json(header_part)
+        claims = decode_jwt_json(claims_part)
+        expected_signature = base64url_bytes(
+            hmac.new(
+                b"test-secret",
+                f"{header_part}.{claims_part}".encode("ascii"),
+                hashlib.sha256,
+            ).digest()
+        )
+
+        self.assertEqual(header["alg"], "HS256")
+        self.assertEqual(header["kid"], "test-key")
+        self.assertEqual(claims["iss"], "test-key")
+        self.assertEqual(claims["video"]["room"], payload["roomName"])
+        self.assertEqual(claims["video"]["roomJoin"], True)
+        self.assertEqual(signature_part, expected_signature)
+        self.assertNotIn("test-secret", token)
 
     def test_compile_encounter_redacts_phi_and_uses_local_ollama_contract(self):
         payload, _response = request_json(
