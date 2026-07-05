@@ -92,9 +92,11 @@ Required preflight checks:
    `paracetamol 500 mg cada ocho horas`.
 9. Confirm the draft shows missing fields and review queue items.
 10. Queue the draft and verify no OpenMRS write occurs unless explicitly enabled.
-11. If write mode is enabled, verify the created encounter uses the expected patient,
+11. Confirm the helper writes a `draft_queued`, `draft_saved`, or
+    `draft_write_rejected` audit event without transcript or draft text.
+12. If write mode is enabled, verify the created encounter uses the expected patient,
     encounter type, location, provider, role, and concept UUIDs.
-12. Reload the patient chart and verify the saved/queued draft state is
+13. Reload the patient chart and verify the saved/queued draft state is
     explainable to a clinician reviewer.
 
 ## Go / No-Go Criteria
@@ -108,6 +110,8 @@ Go for hackathon demo only if all are true:
 - Synthetic identifiers are redacted before display or persistence.
 - Draft remains reviewable and does not write to OpenMRS unless explicitly
   enabled.
+- Draft lifecycle audit events are present and exclude raw transcript/draft
+  content.
 - If OpenMRS write is enabled, the encounter appears under the synthetic
   patient with the configured metadata and concept UUIDs.
 
@@ -117,6 +121,7 @@ No-go if any are true:
 - Token server accepts an unexpected browser origin in shared environments.
 - Agent joins a different room prefix than the frontend.
 - Raw synthetic identifiers appear in transcript, draft, logs, or JSONL queues.
+- Audit JSONL events contain transcript text or draft text.
 - `niega alergias` becomes a positive allergy.
 - OpenMRS write occurs without explicit operator action and configuration.
 

@@ -55,6 +55,10 @@ def smoke_health() -> dict[str, Any]:
         services.get("agent", {}).get("contract") == "LiveKit data-channel topic agent-data",
         "agent data-channel contract is missing",
     )
+    require(
+        services.get("draftAudit", {}).get("rawClinicalTextStored") is False,
+        "draft audit must report that raw clinical text is not stored",
+    )
     print(f"ok health: signing={signing.get('status')}")
     return payload
 
@@ -131,6 +135,8 @@ def smoke_synthetic_and_queue() -> dict[str, Any]:
     require(queued.get("status") == "queued", "draft smoke path must queue without writing")
     require(queued.get("clinicianReviewRequired") is True, "queued draft must require clinician review")
     require(queued.get("openmrsWrite") == "queued_only", "draft smoke path must not write to OpenMRS")
+    require(isinstance(queued.get("auditEventId"), str), "queued draft must include an audit event id")
+    require(queued.get("auditEventType") == "draft_queued", "queued draft must emit a draft_queued audit event")
     print(f"ok draft queue: draftId={queued.get('draftId')}")
     return queued
 

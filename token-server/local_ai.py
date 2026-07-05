@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -24,6 +25,8 @@ DRAFT_STORE_PATH = os.environ.get("DRAFT_STORE_PATH", "/tmp/openmrs-livekit-draf
 RECORDING_MANIFEST_PATH = os.environ.get(
     "RECORDING_MANIFEST_PATH", "/tmp/openmrs-livekit-recordings.jsonl"
 )
+AUDIT_LOG_PATH = os.environ.get("AUDIT_LOG_PATH", "/tmp/openmrs-livekit-audit.jsonl")
+AUDIT_HASH_SALT = os.environ.get("AUDIT_HASH_SALT", "").strip() or "openmrs-livekit-demo-salt"
 
 OPENMRS_DRAFT_WRITE_ENABLED = os.environ.get("OPENMRS_DRAFT_WRITE_ENABLED", "false").lower() in {
     "1",
@@ -163,10 +166,19 @@ def build_health_response(room_prefix: str) -> dict[str, Any]:
             "rawAudioStoredByDefault": False,
             "egressConfigured": bool(os.environ.get("LIVEKIT_EGRESS_URL")),
         },
+        "draftAudit": {
+            "status": "enabled",
+            "contract": "Local JSONL audit events for draft queued/saved/rejected lifecycle.",
+            "auditLogPath": AUDIT_LOG_PATH,
+            "rawClinicalTextStored": False,
+            "patientReference": "sha256_hash",
+            "hashSaltConfigured": AUDIT_HASH_SALT != "openmrs-livekit-demo-salt",
+        },
         "localStorage": {
             "status": "private_files",
             "draftStorePath": DRAFT_STORE_PATH,
             "recordingManifestPath": RECORDING_MANIFEST_PATH,
+            "auditLogPath": AUDIT_LOG_PATH,
             "fileMode": "0600",
             "contract": "Local JSONL queues are created or tightened with owner-only permissions.",
         },
@@ -365,16 +377,45 @@ def queue_openmrs_draft(body: dict[str, Any], context: dict[str, Any] | None = N
         record["encounterUuid"] = openmrs["encounterUuid"]
 
     append_private_jsonl(DRAFT_STORE_PATH, record)
+    audit_event = build_draft_audit_event(draft_id, body, openmrs)
+    append_private_jsonl(AUDIT_LOG_PATH, audit_event)
 
     saved = openmrs["writeStatus"] == "created"
     return {
         "status": "saved" if saved else "queued",
         "draftId": draft_id,
+        "auditEventId": audit_event["id"],
+        "auditEventType": audit_event["eventType"],
         "clinicianReviewRequired": True,
         "openmrsWrite": openmrs["writeStatus"],
         "encounterUuid": openmrs.get("encounterUuid"),
         "message": openmrs["message"],
         "openmrs": openmrs,
+    }
+
+
+def build_draft_audit_event(draft_id: str, body: dict[str, Any], openmrs: dict[str, Any]) -> dict[str, Any]:
+    patient_uuid = str(body.get("patientUuid") or "").strip()
+    event_type = "draft_queued"
+    if openmrs.get("writeStatus") == "created":
+        event_type = "draft_saved"
+    elif openmrs.get("writeRequested"):
+        event_type = "draft_write_rejected"
+
+    return {
+        "id": str(uuid.uuid4()),
+        "createdAt": int(time.time()),
+        "eventType": event_type,
+        "draftId": draft_id,
+        "patientHash": _audit_hash(patient_uuid) if patient_uuid else None,
+        "source": "openmrs-livekit-local-ai",
+        "clinicianReviewRequired": True,
+        "writeRequested": bool(openmrs.get("writeRequested")),
+        "writeEnabled": bool(openmrs.get("writeEnabled")),
+        "openmrsWrite": openmrs.get("writeStatus"),
+        "encounterUuid": openmrs.get("encounterUuid"),
+        "authSource": openmrs.get("authSource"),
+        "rawClinicalTextStored": False,
     }
 
 
@@ -547,6 +588,10 @@ def append_private_jsonl(path: str, record: dict[str, Any]) -> None:
     finally:
         if fd != -1:
             os.close(fd)
+
+
+def _audit_hash(value: str) -> str:
+    return hashlib.sha256(f"{AUDIT_HASH_SALT}:{value}".encode("utf-8")).hexdigest()
 
 
 def _build_encounter_payload(

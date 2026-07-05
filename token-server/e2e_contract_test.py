@@ -144,6 +144,10 @@ def request_json(base_url: str, path: str, payload: dict[str, Any] | None = None
         return json.loads(response.read().decode("utf-8")), response
 
 
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
 def decode_jwt_json(part: str) -> dict[str, Any]:
     padding = "=" * (-len(part) % 4)
     return json.loads(base64.urlsafe_b64decode(f"{part}{padding}").decode("utf-8"))
@@ -198,6 +202,8 @@ class TokenServerE2ETest(unittest.TestCase):
                 "LIVEKIT_HTTP_URL": cls.livekit_url,
                 "DRAFT_STORE_PATH": str(Path(cls.tempdir.name) / "drafts.jsonl"),
                 "RECORDING_MANIFEST_PATH": str(Path(cls.tempdir.name) / "recordings.jsonl"),
+                "AUDIT_LOG_PATH": str(Path(cls.tempdir.name) / "audit.jsonl"),
+                "AUDIT_HASH_SALT": "test-audit-salt",
                 "OPENMRS_DRAFT_WRITE_ENABLED": "true",
                 "OPENMRS_ENCOUNTER_TYPE_UUID": "encounter-type-uuid",
                 "OPENMRS_LOCATION_UUID": "location-uuid",
@@ -257,10 +263,14 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["services"]["productionReadiness"]["status"], "enforced")
         self.assertEqual(payload["services"]["agent"]["contract"], "LiveKit data-channel topic agent-data")
         self.assertEqual(payload["services"]["openmrsDraftWrite"]["status"], "configured")
+        self.assertEqual(payload["services"]["draftAudit"]["status"], "enabled")
+        self.assertFalse(payload["services"]["draftAudit"]["rawClinicalTextStored"])
+        self.assertTrue(payload["services"]["draftAudit"]["hashSaltConfigured"])
         self.assertIn("pediatric-respiratory", payload["services"]["syntheticData"]["cases"])
         self.assertEqual(payload["services"]["recording"]["status"], "manifest_only")
         self.assertEqual(payload["services"]["localStorage"]["status"], "private_files")
         self.assertEqual(payload["services"]["localStorage"]["fileMode"], "0600")
+        self.assertTrue(payload["services"]["localStorage"]["auditLogPath"].endswith("audit.jsonl"))
 
     def test_token_is_hmac_signed_and_does_not_expose_secret(self):
         payload, _response = request_json(
@@ -377,6 +387,49 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertIn(("instructions-concept-uuid", "fluids"), structured_obs)
         draft_store_path = Path(self.tempdir.name) / "drafts.jsonl"
         self.assertEqual(stat.S_IMODE(draft_store_path.stat().st_mode), 0o600)
+        audit_store_path = Path(self.tempdir.name) / "audit.jsonl"
+        self.assertEqual(stat.S_IMODE(audit_store_path.stat().st_mode), 0o600)
+        audit_event = next(event for event in read_jsonl(audit_store_path) if event["id"] == payload["auditEventId"])
+        self.assertEqual(payload["auditEventType"], "draft_saved")
+        self.assertEqual(audit_event["eventType"], "draft_saved")
+        self.assertEqual(audit_event["draftId"], payload["draftId"])
+        self.assertEqual(audit_event["openmrsWrite"], "created")
+        self.assertEqual(audit_event["encounterUuid"], "encounter-created")
+        self.assertEqual(audit_event["patientHash"], hashlib.sha256(b"test-audit-salt:patient-uuid").hexdigest())
+        self.assertNotIn("draft", audit_event)
+        self.assertNotIn("redactedTranscript", audit_event)
+        self.assertNotIn("Doctor: cough", json.dumps(audit_event))
+
+    def test_openmrs_draft_queue_creates_minimal_audit_event(self):
+        payload, _response = request_json(
+            self.base_url,
+            "/openmrs/draft",
+            {
+                "patientUuid": "queued-patient-uuid",
+                "draft": {
+                    "chiefComplaint": "headache",
+                    "symptoms": ["headache"],
+                    "medicationsMentioned": [],
+                    "allergiesMentioned": [],
+                    "assessmentNotes": "review",
+                    "patientInstructions": "return precautions",
+                },
+                "redactedTranscript": "Doctor: headache",
+            },
+        )
+
+        self.assertEqual(payload["status"], "queued")
+        self.assertEqual(payload["openmrsWrite"], "queued_only")
+        self.assertEqual(payload["auditEventType"], "draft_queued")
+        audit_event = next(
+            event for event in read_jsonl(Path(self.tempdir.name) / "audit.jsonl") if event["id"] == payload["auditEventId"]
+        )
+        self.assertEqual(audit_event["eventType"], "draft_queued")
+        self.assertEqual(audit_event["draftId"], payload["draftId"])
+        self.assertEqual(audit_event["openmrsWrite"], "queued_only")
+        self.assertFalse(audit_event["writeRequested"])
+        self.assertEqual(audit_event["patientHash"], hashlib.sha256(b"test-audit-salt:queued-patient-uuid").hexdigest())
+        self.assertNotIn("Doctor: headache", json.dumps(audit_event))
 
     def test_cors_supports_credentialed_o3_requests(self):
         request = urllib.request.Request(
