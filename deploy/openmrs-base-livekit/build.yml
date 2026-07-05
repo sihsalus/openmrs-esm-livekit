@@ -1,0 +1,8 @@
+services:
+  gateway:
+    build:
+      context: ${OPENMRS_DISTRO_ROOT:?OPENMRS_DISTRO_ROOT is required}/gateway
+
+  frontend:
+    build:
+      context: ${OPENMRS_DISTRO_ROOT:?OPENMRS_DISTRO_ROOT is required}/frontend

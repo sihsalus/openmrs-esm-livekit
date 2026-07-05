@@ -17,3 +17,4 @@ video-assets/*.tar.gz
 video-assets/concat-list.txt
 video-assets/playwright-output/
 video-assets/playwright-recording/
+test-results/
