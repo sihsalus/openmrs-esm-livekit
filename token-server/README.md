@@ -191,3 +191,15 @@ yarn test:e2e:token-server
 ```
 
 The token-server e2e test starts fake local OpenMRS, Ollama, and LiveKit services, then validates `/health`, PHI redaction, synthetic data generation, recording consent, CORS, and an authenticated OpenMRS encounter write against the fake REST API.
+
+Run a smoke test against a helper that is already running:
+
+```bash
+yarn test:smoke:token-server
+```
+
+Override the target URL when testing a remote helper:
+
+```bash
+TOKEN_SERVER_SMOKE_URL=https://helper.example.org yarn test:smoke:token-server
+```

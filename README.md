@@ -96,6 +96,14 @@ yarn test:e2e:token-server
 
 The helper e2e test starts fake local OpenMRS, Ollama, and LiveKit services, then validates health checks, PHI redaction, synthetic data generation, recording consent, CORS, and an authenticated OpenMRS encounter write against the fake REST API.
 
+Run a smoke test against a real running helper:
+
+```bash
+yarn test:smoke:token-server
+```
+
+For the full browser, LiveKit, agent, and OpenMRS acceptance checklist, see [docs/e2e-smoke-test.md](docs/e2e-smoke-test.md).
+
 ## Hackathon demo
 
 For the OpenMRS AI Hackathon demo, the project shows OpenMRS, LiveKit, and local AI services running locally. It generates a synthetic bilingual consultation, redacts patient identifiers, and produces a reviewable OpenMRS encounter draft.
