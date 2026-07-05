@@ -91,6 +91,23 @@ describe('parseAgentDataPayload', () => {
     });
   });
 
+  it('accepts agent readiness status payloads from the LiveKit agent', () => {
+    expect(
+      parseAgentDataPayload(
+        encode({
+          type: 'status',
+          payload: {
+            step: 'agent_listening',
+            message: 'Agent is listening for clinical conversation.',
+          },
+        }),
+      ),
+    ).toEqual({
+      type: 'status',
+      status: 'Agent is listening for clinical conversation.',
+    });
+  });
+
   it('accepts the real agent draft payload emitted after a clinical fact is recorded', () => {
     expect(
       parseAgentDataPayload(
