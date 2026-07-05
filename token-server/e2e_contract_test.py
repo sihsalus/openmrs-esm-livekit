@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -258,6 +259,8 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["services"]["openmrsDraftWrite"]["status"], "configured")
         self.assertIn("pediatric-respiratory", payload["services"]["syntheticData"]["cases"])
         self.assertEqual(payload["services"]["recording"]["status"], "manifest_only")
+        self.assertEqual(payload["services"]["localStorage"]["status"], "private_files")
+        self.assertEqual(payload["services"]["localStorage"]["fileMode"], "0600")
 
     def test_token_is_hmac_signed_and_does_not_expose_secret(self):
         payload, _response = request_json(
@@ -324,6 +327,8 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(allowed["recordingStatus"], "manifest_recorded")
         self.assertFalse(allowed["rawAudioStored"])
         self.assertEqual(allowed["mediaRecording"], "not_configured")
+        manifest_path = Path(self.tempdir.name) / "recordings.jsonl"
+        self.assertEqual(stat.S_IMODE(manifest_path.stat().st_mode), 0o600)
 
     def test_openmrs_draft_writes_encounter_when_enabled_and_authenticated(self):
         auth = base64.b64encode(b"admin:Admin123").decode("ascii")
@@ -359,6 +364,8 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertIn(("symptom-concept-uuid", "cough"), structured_obs)
         self.assertIn(("medication-concept-uuid", "paracetamol"), structured_obs)
         self.assertIn(("instructions-concept-uuid", "fluids"), structured_obs)
+        draft_store_path = Path(self.tempdir.name) / "drafts.jsonl"
+        self.assertEqual(stat.S_IMODE(draft_store_path.stat().st_mode), 0o600)
 
     def test_cors_supports_credentialed_o3_requests(self):
         request = urllib.request.Request(

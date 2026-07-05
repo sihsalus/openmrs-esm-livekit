@@ -58,6 +58,16 @@ allowlisted origins except localhost/loopback.
 In development mode, CORS remains permissive for local demos but `/health`
 returns a warning until `TOKEN_SERVER_ALLOWED_ORIGINS` is configured.
 
+## Local storage
+
+Queued drafts and recording consent manifests are local JSONL files. The helper
+creates or tightens those files with owner-only permissions (`0600`) and reports
+the paths under `services.localStorage`.
+
+This is a KISS semi-production safeguard, not encryption at rest. For regulated
+production PHI, place `DRAFT_STORE_PATH` and `RECORDING_MANIFEST_PATH` on an
+encrypted volume or replace the JSONL queue with a managed encrypted store.
+
 ### POST /token
 
 Existing LiveKit token endpoint.
