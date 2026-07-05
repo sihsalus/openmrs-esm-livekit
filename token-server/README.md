@@ -31,6 +31,7 @@ Detailed service status is available under `services`, including `services.openm
 `services.livekitTokenSigning` reports whether `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` are configured.
 `services.cors` reports whether browser origins are allowlisted, and
 `services.productionReadiness` reports whether production checks are enforced.
+`services.draftAudit` reports the local draft lifecycle audit log contract.
 
 ## AI Boundary
 
@@ -87,6 +88,18 @@ the paths under `services.localStorage`.
 This is a KISS semi-production safeguard, not encryption at rest. For regulated
 production PHI, place `DRAFT_STORE_PATH` and `RECORDING_MANIFEST_PATH` on an
 encrypted volume or replace the JSONL queue with a managed encrypted store.
+
+Draft queue/save/reject audit events are written to a separate owner-only JSONL
+file. Audit events intentionally exclude transcript and draft text. Patient
+references are stored as salted SHA-256 hashes.
+
+```bash
+AUDIT_LOG_PATH=/tmp/openmrs-livekit-audit.jsonl
+AUDIT_HASH_SALT=<site-managed-secret>
+```
+
+For shared or regulated deployments, `AUDIT_HASH_SALT` should come from the
+site secrets manager. The default salt is only suitable for synthetic demo data.
 
 ### POST /token
 
@@ -189,6 +202,8 @@ By default this endpoint is safe: it queues locally and returns a preview of the
 {
   "status": "queued",
   "draftId": "uuid",
+  "auditEventId": "uuid",
+  "auditEventType": "draft_queued",
   "clinicianReviewRequired": true,
   "openmrsWrite": "queued_only",
   "openmrs": {
@@ -237,7 +252,15 @@ OPENMRS_BASIC_AUTH=<base64-user-password-or-full-Basic-header>
 
 For browser session forwarding, call the helper with `credentials: 'include'`. The helper accepts the OpenMRS session cookie and validates it against `GET /openmrs/ws/rest/v1/session` before attempting `POST /openmrs/ws/rest/v1/encounter`.
 
-Queued drafts are stored in `/tmp/openmrs-livekit-drafts.jsonl`.
+Queued drafts are stored in `/tmp/openmrs-livekit-drafts.jsonl`. Draft lifecycle
+audit events are stored in `/tmp/openmrs-livekit-audit.jsonl` by default.
+
+Audit event types:
+
+- `draft_queued`: draft was queued locally without an OpenMRS write.
+- `draft_saved`: OpenMRS accepted the encounter create request.
+- `draft_write_rejected`: an OpenMRS write was requested but blocked or rejected
+  by configuration, authentication, patient lookup, or the OpenMRS REST API.
 
 ## Tests
 

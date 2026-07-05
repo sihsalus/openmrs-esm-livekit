@@ -150,6 +150,8 @@ yarn test:smoke:token-server
 
 For the full browser, LiveKit, agent, and OpenMRS acceptance checklist, see [docs/e2e-smoke-test.md](docs/e2e-smoke-test.md).
 
+For the 2026 open-source scribe benchmark and reuse decisions, see [docs/open-source-benchmark.md](docs/open-source-benchmark.md).
+
 ## Hackathon demo
 
 For the OpenMRS AI Hackathon demo, the project shows OpenMRS, LiveKit, and local AI services running locally. It generates a synthetic bilingual consultation, redacts patient identifiers, and produces a reviewable OpenMRS encounter draft.
