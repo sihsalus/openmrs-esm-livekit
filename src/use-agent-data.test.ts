@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { parseAgentDataPayload } from './use-agent-data';
+import { agentDataTopic, isAgentDataTopic, parseAgentDataPayload } from './use-agent-data';
 
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 
 describe('parseAgentDataPayload', () => {
+  it('accepts only the agent data-channel topic', () => {
+    expect(isAgentDataTopic(agentDataTopic)).toBe(true);
+    expect(isAgentDataTopic('chat')).toBe(false);
+    expect(isAgentDataTopic(undefined)).toBe(false);
+  });
+
   it('accepts assistant transcripts and fills a missing timestamp', () => {
     expect(
       parseAgentDataPayload(
