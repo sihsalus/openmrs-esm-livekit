@@ -45,6 +45,11 @@ import {
   type ServiceHealth,
   type ServiceStatus,
 } from './agent-health';
+import {
+  isBrowserMicrophoneAvailable,
+  microphoneErrorMessage,
+  microphoneUnavailableMessage,
+} from './microphone-availability';
 import AudioVisualizer from './audio-visualizer.component';
 import PatientContext from './patient-context.component';
 import type { Config } from './config-schema';
@@ -308,6 +313,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const [draftSaveMessage, setDraftSaveMessage] = useState<string | null>(null);
   const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [health, setHealth] = useState<ServiceHealth>(initialHealth);
+  const microphoneAvailable = isBrowserMicrophoneAvailable();
   const timeouts = useRef<number[]>([]);
   const lastAppliedAgentDraft = useRef<EncounterDraft | null>(null);
   const {
@@ -330,20 +336,38 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     };
   }, []);
 
-  // Auto-enable mic on connect
   useEffect(() => {
-    if (connectionState === ConnectionState.Connected && localParticipant && muted) {
-      localParticipant
-        .setMicrophoneEnabled(true)
-        .then(() => {
+    if (connectionState !== ConnectionState.Connected || !localParticipant || !muted) {
+      return;
+    }
+
+    if (!microphoneAvailable) {
+      setMicError(microphoneUnavailableMessage(t));
+      return;
+    }
+
+    let cancelled = false;
+
+    const enableMicrophone = async () => {
+      try {
+        await localParticipant.setMicrophoneEnabled(true);
+        if (!cancelled) {
           setMuted(false);
           setMicError(null);
-        })
-        .catch((err) => {
-          setMicError(err?.message || 'Microphone access denied. HTTPS or localhost required for Safari.');
-        });
-    }
-  }, [connectionState, localParticipant]);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setMicError(microphoneErrorMessage(err, t));
+        }
+      }
+    };
+
+    enableMicrophone();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionState, localParticipant, microphoneAvailable, muted, t]);
 
   // Health check on mount
   useEffect(() => {
@@ -406,16 +430,23 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     !demoRunning;
 
   const toggleMute = useCallback(async () => {
-    if (localParticipant) {
-      try {
-        await localParticipant.setMicrophoneEnabled(muted);
-        setMuted(!muted);
-        setMicError(null);
-      } catch (err) {
-        setMicError(err instanceof Error ? err.message : 'Microphone access failed');
-      }
+    if (!localParticipant) {
+      return;
     }
-  }, [localParticipant, muted]);
+
+    if (!microphoneAvailable) {
+      setMicError(microphoneUnavailableMessage(t));
+      return;
+    }
+
+    try {
+      await localParticipant.setMicrophoneEnabled(muted);
+      setMuted(!muted);
+      setMicError(null);
+    } catch (err) {
+      setMicError(microphoneErrorMessage(err, t));
+    }
+  }, [localParticipant, microphoneAvailable, muted, t]);
 
   const scheduleTimeout = useCallback((fn: () => void, ms: number) => {
     const id = window.setTimeout(fn, ms);
@@ -510,6 +541,11 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const stateKind = connectionState === ConnectionState.Connected ? 'green' : 'gray';
   const doctorLanguageLabel = languageLabel(doctorLanguage, t);
   const patientLanguageLabel = languageLabel(patientLanguage, t);
+  const microphoneButtonLabel = microphoneAvailable
+    ? muted
+      ? t('unmute', 'Unmute')
+      : t('mute', 'Mute')
+    : t('microphoneUnavailableShort', 'Microphone unavailable');
 
   const flowSteps: Array<{
     step: FlowStep;
@@ -582,8 +618,9 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           size="lg"
           hasIconOnly
           renderIcon={muted ? MicrophoneOff : Microphone}
-          iconDescription={muted ? t('unmute', 'Unmute') : t('mute', 'Mute')}
+          iconDescription={microphoneButtonLabel}
           onClick={toggleMute}
+          disabled={!microphoneAvailable}
         />
         <Button
           kind="primary"
