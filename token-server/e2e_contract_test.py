@@ -22,6 +22,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 TOKEN_SERVER = ROOT / "token-server" / "server.py"
+sys.path.insert(0, str(TOKEN_SERVER.parent))
+import local_ai  # noqa: E402
 
 
 def free_port() -> int:
@@ -71,6 +73,17 @@ class FakeOpenMRSHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps(payload).encode("utf-8"))
+
+    def log_message(self, *_args):
+        return
+
+
+class FakeOpenMRSLoginHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.end_headers()
+        self.wfile.write(b"<!doctype html><title>OpenMRS Login</title>")
 
     def log_message(self, *_args):
         return
@@ -271,6 +284,17 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["services"]["localStorage"]["status"], "private_files")
         self.assertEqual(payload["services"]["localStorage"]["fileMode"], "0600")
         self.assertTrue(payload["services"]["localStorage"]["auditLogPath"].endswith("audit.jsonl"))
+
+    def test_openmrs_probe_treats_login_html_as_reachable(self):
+        server, base_url = start_server(FakeOpenMRSLoginHandler)
+        try:
+            payload = local_ai._probe_http(f"{base_url}/openmrs/ws/rest/v1/session", expect_json=True)
+        finally:
+            server.shutdown()
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertFalse(payload["json"])
+        self.assertEqual(payload["contentType"], "text/html")
 
     def test_token_is_hmac_signed_and_does_not_expose_secret(self):
         payload, _response = request_json(
