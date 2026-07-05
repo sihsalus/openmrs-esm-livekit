@@ -10,13 +10,26 @@ export interface AgentTranscript {
   timestamp: number;
 }
 
+export interface AgentClinicalFact {
+  kind: string;
+  value: string;
+  confidence: number;
+  status: string;
+  needsReview?: boolean;
+}
+
 export interface AgentDraft {
+  patientUuid?: string | null;
   chiefComplaint: string;
   symptoms: string[];
   medicationsMentioned: string[];
   allergiesMentioned: string[];
   assessmentNotes: string;
   patientInstructions: string;
+  facts?: AgentClinicalFact[];
+  reviewQueue?: AgentClinicalFact[];
+  missingFields?: string[];
+  clinicianReviewRequired?: boolean;
 }
 
 export interface AgentMessage {
@@ -158,9 +171,9 @@ function isAgentDraft(payload: unknown): payload is AgentDraft {
 
   return (
     typeof payload.chiefComplaint === 'string' &&
-    Array.isArray(payload.symptoms) &&
-    Array.isArray(payload.medicationsMentioned) &&
-    Array.isArray(payload.allergiesMentioned) &&
+    isStringArray(payload.symptoms) &&
+    isStringArray(payload.medicationsMentioned) &&
+    isStringArray(payload.allergiesMentioned) &&
     typeof payload.assessmentNotes === 'string' &&
     typeof payload.patientInstructions === 'string'
   );
@@ -176,4 +189,8 @@ function stringField(payload: unknown, key: string): string | undefined {
 
 function isRecord(payload: unknown): payload is Record<string, unknown> {
   return typeof payload === 'object' && payload !== null;
+}
+
+function isStringArray(payload: unknown): payload is string[] {
+  return Array.isArray(payload) && payload.every((item) => typeof item === 'string');
 }
