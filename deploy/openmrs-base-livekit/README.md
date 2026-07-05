@@ -13,6 +13,7 @@ OPENMRS_DISTRO_ROOT=/path/to/openmrs-distro-referenceapplication
 OPENMRS_ESM_LIVEKIT_PATH=/path/to/openmrs-esm-livekit
 OPENMRS_LIVEKIT_AGENT_PATH=/path/to/openmrs-livekit
 LIVEKIT_HOST=<browser-reachable-host>
+OPENMRS_LIVEKIT_SERVER_URL=<optional-browser-wss-livekit-url>
 LIVEKIT_API_KEY=<site-livekit-api-key>
 LIVEKIT_API_SECRET=<site-livekit-api-secret>
 AUDIT_HASH_SALT=<site-managed-random-salt>
@@ -99,10 +100,27 @@ The script updates:
 
 - `frontend/spa-assemble-config.json` with `@sihsalus/esm-livekit-app`.
 - `frontend/config-core_demo.json` with the `/livekit/token` endpoint.
+- `frontend/config-core_demo.json` with `OPENMRS_LIVEKIT_SERVER_URL` when set,
+  for example `wss://openmrs.example.org/livekit-sfu`.
 - `frontend/Dockerfile` with npm registry retry settings for slower servers.
-- gateway templates with `/livekit/*` proxy and LiveKit CSP entries.
+- gateway templates with `/livekit/*`, `/livekit-sfu/*`, and LiveKit CSP entries.
 - `deploy/livekit/livekit-docker.yaml` with the constrained UDP port range.
 - `.env` with LiveKit credentials, allowed origins, audit salt, and paths.
+
+For HTTPS demos, use the OpenMRS distro SSL compose file and route LiveKit through
+the gateway WebSocket proxy:
+
+```bash
+SSL_MODE=dev
+CERT_WEB_DOMAINS=openmrs.example.org,localhost
+CERT_WEB_DOMAIN_COMMON_NAME=openmrs.example.org
+OPENMRS_LIVEKIT_SERVER_URL=wss://openmrs.example.org/livekit-sfu
+TOKEN_SERVER_ALLOWED_ORIGINS=https://openmrs.example.org,http://openmrs.example.org
+```
+
+The direct `https://<tailscale-ip>/...` URL only works if the gateway exposes
+port `443` and the browser accepts the certificate for that IP. Prefer the
+Tailscale MagicDNS hostname for microphone tests.
 
 ## Run
 

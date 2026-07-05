@@ -13,6 +13,7 @@ LIVEKIT_CONFIG = Path(
 ).resolve()
 LIVEKIT_DOCKER_CONFIG = ROOT / "deploy" / "livekit" / "livekit-docker.yaml"
 FRONTEND_MODULE_VERSION = os.environ.get("OPENMRS_LIVEKIT_FRONTEND_VERSION", "0.1.9")
+FRONTEND_LIVEKIT_SERVER_URL = os.environ.get("OPENMRS_LIVEKIT_SERVER_URL", "").strip()
 LIVEKIT_HOST = os.environ.get("LIVEKIT_HOST", "localhost")
 TOKEN_SERVER_ALLOWED_ORIGINS = os.environ.get("TOKEN_SERVER_ALLOWED_ORIGINS", "").strip()
 
@@ -26,7 +27,7 @@ def update_frontend() -> None:
     config_path = ROOT / "frontend" / "config-core_demo.json"
     config = json.loads(config_path.read_text())
     config["@sihsalus/esm-livekit-app"] = {
-        "livekitServerUrl": "",
+        "livekitServerUrl": FRONTEND_LIVEKIT_SERVER_URL,
         "tokenEndpoint": "/livekit/token",
         "roomPrefix": "iot-device-",
     }
@@ -62,6 +63,17 @@ def update_gateway() -> None:
     proxy_pass $token_server;
   }
 """
+    livekit_sfu_location = """  location /livekit-sfu/ {
+    set $livekit_server http://livekit:7880;
+    rewrite ^/livekit-sfu/(.*)$ /$1 break;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_read_timeout 3600s;
+    proxy_pass $livekit_server;
+  }
+"""
 
     for relative in ("gateway/default.conf.template", "gateway/default-ssl.conf.template"):
         path = ROOT / relative
@@ -70,6 +82,9 @@ def update_gateway() -> None:
             text = text.replace(old_location, new_location, 1)
         elif "location /livekit/" not in text:
             text = text.replace("  location = / {", new_location + "\n  location = / {", 1)
+
+        if "location /livekit-sfu/" not in text:
+            text = text.replace("  location = / {", livekit_sfu_location + "\n  location = / {", 1)
 
         if relative.endswith("default-ssl.conf.template") and "${LIVEKIT_HOST}:7880" not in text:
             text = text.replace(
@@ -159,7 +174,7 @@ def update_env() -> None:
 def default_allowed_origins(host: str) -> str:
     origins = ["http://localhost:8080", "http://127.0.0.1:8080"]
     if host not in {"localhost", "127.0.0.1", ""}:
-        origins.append(f"http://{host}")
+        origins.extend([f"http://{host}", f"https://{host}"])
     return ",".join(origins)
 
 
