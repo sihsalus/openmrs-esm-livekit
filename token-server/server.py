@@ -7,12 +7,18 @@ Usage:
     LIVEKIT_API_KEY=... LIVEKIT_API_SECRET=... python server.py
 """
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import jwt
+try:
+    import jwt
+except ModuleNotFoundError:
+    jwt = None
 from local_ai import (
     build_health_response,
     compile_encounter,
@@ -24,8 +30,13 @@ from local_ai import (
     tts_response,
 )
 
-API_KEY = os.environ.get("LIVEKIT_API_KEY", "APICSg8zBzkj8ip")
-API_SECRET = os.environ.get("LIVEKIT_API_SECRET", "EKXBwcBozWQbzBbZqLyf9MGtvptpE59E884wwfwe5qcA")
+DEFAULT_DEV_API_KEY = "devkey"
+DEFAULT_DEV_API_SECRET = "secret"
+
+LIVEKIT_API_KEY_CONFIGURED = bool(os.environ.get("LIVEKIT_API_KEY"))
+LIVEKIT_API_SECRET_CONFIGURED = bool(os.environ.get("LIVEKIT_API_SECRET"))
+API_KEY = os.environ.get("LIVEKIT_API_KEY", DEFAULT_DEV_API_KEY)
+API_SECRET = os.environ.get("LIVEKIT_API_SECRET", DEFAULT_DEV_API_SECRET)
 PORT = int(os.environ.get("TOKEN_SERVER_PORT", "7890"))
 ROOM_PREFIX = os.environ.get("LIVEKIT_ROOM_PREFIX", "iot-device-")
 
@@ -47,14 +58,36 @@ def create_token(room_name: str, identity: str) -> str:
         },
         "metadata": json.dumps({"role": "clinician"}),
     }
-    return jwt.encode(claims, API_SECRET, algorithm="HS256", headers={"kid": API_KEY})
+    headers = {"kid": API_KEY}
+    if jwt:
+        token = jwt.encode(claims, API_SECRET, algorithm="HS256", headers=headers)
+        return token.decode("ascii") if isinstance(token, bytes) else token
+
+    return encode_hs256_jwt(claims, API_SECRET, headers)
+
+
+def encode_hs256_jwt(claims: dict, secret: str, headers: dict | None = None) -> str:
+    header = {"typ": "JWT", "alg": "HS256", **(headers or {})}
+    header_part = base64url_json(header)
+    claims_part = base64url_json(claims)
+    signing_input = f"{header_part}.{claims_part}".encode("ascii")
+    signature = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    return f"{header_part}.{claims_part}.{base64url_bytes(signature)}"
+
+
+def base64url_json(payload: dict) -> str:
+    return base64url_bytes(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+
+
+def base64url_bytes(payload: bytes) -> str:
+    return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
 
 
 class TokenHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self._path()
         if path == "/health":
-            self._send_json(build_health_response(ROOM_PREFIX))
+            self._send_json(build_token_server_health())
             return
 
         self.send_error(404)
@@ -165,7 +198,43 @@ def sanitize_room_prefix(value: str) -> str:
     return prefix or ROOM_PREFIX
 
 
+def build_token_server_health() -> dict:
+    payload = build_health_response(ROOM_PREFIX)
+    payload.setdefault("services", {})["livekitTokenSigning"] = livekit_token_signing_status()
+    warning = livekit_token_signing_warning()
+    if warning:
+        payload.setdefault("warnings", []).append(warning)
+    return payload
+
+
+def livekit_token_signing_status() -> dict:
+    if LIVEKIT_API_KEY_CONFIGURED and LIVEKIT_API_SECRET_CONFIGURED:
+        status = "configured"
+    elif LIVEKIT_API_KEY_CONFIGURED or LIVEKIT_API_SECRET_CONFIGURED:
+        status = "partial_configuration"
+    else:
+        status = "dev_default"
+
+    return {
+        "status": status,
+        "apiKeyConfigured": LIVEKIT_API_KEY_CONFIGURED,
+        "apiSecretConfigured": LIVEKIT_API_SECRET_CONFIGURED,
+        "usesDevDefaults": status != "configured",
+    }
+
+
+def livekit_token_signing_warning() -> str | None:
+    if LIVEKIT_API_KEY_CONFIGURED and LIVEKIT_API_SECRET_CONFIGURED:
+        return None
+    if LIVEKIT_API_KEY_CONFIGURED or LIVEKIT_API_SECRET_CONFIGURED:
+        return "LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be configured together for real LiveKit rooms."
+    return "Using LiveKit dev token defaults. Set LIVEKIT_API_KEY and LIVEKIT_API_SECRET for any shared or production environment."
+
+
 if __name__ == "__main__":
+    warning = livekit_token_signing_warning()
+    if warning:
+        print(f"[token-server] WARNING: {warning}")
     server = ThreadingHTTPServer(("0.0.0.0", PORT), TokenHandler)
     print(f"OpenMRS LiveKit helper listening on :{PORT}")
     server.serve_forever()
