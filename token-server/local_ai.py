@@ -945,10 +945,22 @@ def _probe_ollama() -> dict[str, Any]:
 
 def _probe_http(url: str, expect_json: bool) -> dict[str, Any]:
     try:
-        body = _json_request(url, timeout=2) if expect_json else _text_request(url, timeout=2)
+        if expect_json:
+            body, content_type = _request_body(url, timeout=2)
+        else:
+            body = _text_request(url, timeout=2)
+            content_type = None
         payload: dict[str, Any] = {"status": "ok", "url": url}
-        if isinstance(body, dict) and "authenticated" in body:
-            payload["authenticated"] = body["authenticated"]
+        if expect_json:
+            try:
+                parsed = json.loads(body) if body else {}
+            except json.JSONDecodeError:
+                payload["json"] = False
+                if content_type:
+                    payload["contentType"] = content_type
+                return payload
+            if isinstance(parsed, dict) and "authenticated" in parsed:
+                payload["authenticated"] = parsed["authenticated"]
         return payload
     except Exception as error:
         return {"status": "unreachable", "url": url, "detail": str(error)[:160]}
@@ -963,8 +975,14 @@ def _json_request(url: str, payload: dict[str, Any] | None = None, timeout: int 
 
 
 def _text_request(url: str, timeout: int = 2) -> str:
+    body, _content_type = _request_body(url, timeout=timeout)
+    return body
+
+
+def _request_body(url: str, timeout: int = 2) -> tuple[str, str | None]:
     with urllib.request.urlopen(url, timeout=timeout) as response:
-        return response.read(1024).decode("utf-8", "replace")
+        content_type = response.headers.get("Content-Type")
+        return response.read(1024).decode("utf-8", "replace"), content_type
 
 
 def _first_command(candidates: list[str]) -> str | None:
