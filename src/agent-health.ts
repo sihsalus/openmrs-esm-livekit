@@ -8,6 +8,9 @@ export interface ServiceHealth {
   stt: ServiceStatus;
   tts: ServiceStatus;
   llm: ServiceStatus;
+  productionReadiness: ServiceStatus;
+  cors: ServiceStatus;
+  localStorage: ServiceStatus;
 }
 
 export const initialHealth: ServiceHealth = {
@@ -18,6 +21,9 @@ export const initialHealth: ServiceHealth = {
   stt: 'pending',
   tts: 'pending',
   llm: 'pending',
+  productionReadiness: 'pending',
+  cors: 'pending',
+  localStorage: 'pending',
 };
 
 export function checkingHealth(): ServiceHealth {
@@ -29,6 +35,9 @@ export function checkingHealth(): ServiceHealth {
     stt: 'checking',
     tts: 'checking',
     llm: 'checking',
+    productionReadiness: 'checking',
+    cors: 'checking',
+    localStorage: 'checking',
   };
 }
 
@@ -48,11 +57,14 @@ export function normalizeTokenServerHealth(payload: unknown): ServiceHealth | nu
     llm: serviceHealthToStatus(
       serviceStatus(services.llm) ?? serviceStatus(services.ollama) ?? serviceStatus(services.parser),
     ),
+    productionReadiness: serviceHealthToStatus(serviceStatus(services.productionReadiness)),
+    cors: serviceHealthToStatus(serviceStatus(services.cors)),
+    localStorage: serviceHealthToStatus(serviceStatus(services.localStorage)),
   };
 }
 
 export function serviceHealthToStatus(status: unknown): ServiceStatus {
-  if (status === 'ok' || status === 'configured') {
+  if (status === 'ok' || status === 'configured' || status === 'enforced' || status === 'private_files') {
     return 'ok';
   }
   if (status === 'unreachable' || status === 'error') {

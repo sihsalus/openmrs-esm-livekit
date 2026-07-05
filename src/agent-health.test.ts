@@ -5,9 +5,13 @@ describe('agent health normalization', () => {
   it('maps helper service statuses into frontend status tags', () => {
     expect(serviceHealthToStatus('ok')).toBe('ok');
     expect(serviceHealthToStatus('configured')).toBe('ok');
+    expect(serviceHealthToStatus('enforced')).toBe('ok');
+    expect(serviceHealthToStatus('private_files')).toBe('ok');
     expect(serviceHealthToStatus('error')).toBe('error');
     expect(serviceHealthToStatus('unreachable')).toBe('error');
     expect(serviceHealthToStatus('not_configured')).toBe('pending');
+    expect(serviceHealthToStatus('demo_mode')).toBe('pending');
+    expect(serviceHealthToStatus('permissive_dev')).toBe('pending');
   });
 
   it('uses the canonical llm service when present', () => {
@@ -22,6 +26,9 @@ describe('agent health normalization', () => {
           tts: { status: 'configured' },
           llm: { status: 'configured' },
           ollama: { status: 'error' },
+          productionReadiness: { status: 'enforced' },
+          cors: { status: 'configured' },
+          localStorage: { status: 'private_files' },
         },
       }),
     ).toEqual({
@@ -32,6 +39,9 @@ describe('agent health normalization', () => {
       stt: 'ok',
       tts: 'ok',
       llm: 'ok',
+      productionReadiness: 'ok',
+      cors: 'ok',
+      localStorage: 'ok',
     });
   });
 
