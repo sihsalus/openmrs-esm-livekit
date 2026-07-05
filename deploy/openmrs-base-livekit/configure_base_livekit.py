@@ -11,7 +11,7 @@ ROOT = Path(os.environ.get("OPENMRS_DISTRO_ROOT", Path.cwd())).resolve()
 LIVEKIT_CONFIG = Path(
     os.environ.get("LIVEKIT_CONFIG", ROOT / "deploy" / "livekit" / "livekit.yaml")
 ).resolve()
-FRONTEND_MODULE_VERSION = os.environ.get("OPENMRS_LIVEKIT_FRONTEND_VERSION", "0.1.8")
+FRONTEND_MODULE_VERSION = os.environ.get("OPENMRS_LIVEKIT_FRONTEND_VERSION", "0.1.9")
 LIVEKIT_HOST = os.environ.get("LIVEKIT_HOST", "localhost")
 TOKEN_SERVER_ALLOWED_ORIGINS = os.environ.get("TOKEN_SERVER_ALLOWED_ORIGINS", "").strip()
 

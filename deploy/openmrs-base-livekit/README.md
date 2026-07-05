@@ -24,7 +24,7 @@ The OpenMRS frontend assembly installs the microfrontend from npm. Set
 contains the commit you want to deploy:
 
 ```bash
-OPENMRS_LIVEKIT_FRONTEND_VERSION=0.1.8
+OPENMRS_LIVEKIT_FRONTEND_VERSION=0.1.9
 ```
 
 If the current source has not been published to npm yet, build the local bundle
