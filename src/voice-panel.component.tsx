@@ -320,11 +320,13 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
             )}
             <Button
               kind="primary"
-              renderIcon={Microphone}
               onClick={connect}
               disabled={startConsultationDisabled}
             >
-              {startConsultationLabel}
+              <span className={styles.buttonLabelWithIcon}>
+                {startConsultationLabel}
+                <Microphone size={16} />
+              </span>
             </Button>
           </ButtonSet>
         )}

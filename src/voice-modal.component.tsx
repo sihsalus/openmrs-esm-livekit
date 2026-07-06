@@ -27,13 +27,11 @@ const VoiceModal: React.FC<VoiceModalProps> = ({ close }) => {
           <Button kind="secondary" onClick={closeModal}>
             {t('cancel', 'Cancel')}
           </Button>
-          <Button
-            kind="primary"
-            renderIcon={Microphone}
-            onClick={preflightActions.onStart}
-            disabled={preflightActions.startDisabled}
-          >
-            {preflightActions.startLabel}
+          <Button kind="primary" onClick={preflightActions.onStart} disabled={preflightActions.startDisabled}>
+            <span className={styles.buttonLabelWithIcon}>
+              {preflightActions.startLabel}
+              <Microphone size={16} />
+            </span>
           </Button>
         </ModalFooter>
       )}
