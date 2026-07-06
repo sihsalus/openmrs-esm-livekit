@@ -24,11 +24,10 @@ import { useTranslation } from 'react-i18next';
 import {
   buildQueuedOpenmrsDraftPayload,
   fetchLivekitToken,
-  resolveLivekitServerUrl,
-  resolveTokenEndpoint,
   resolveTokenServerPath,
   saveOpenmrsDraft,
 } from '../livekit/livekit-token';
+import { resolveLivekitOperationalConfig } from '../livekit/livekit-config';
 import { useAgentData, type AgentClinicalFact, type AgentTranscript } from '../livekit/use-agent-data';
 import {
   checkingHealth,
@@ -164,14 +163,6 @@ const initialStepStatus: Record<FlowStep, StepStatus> = {
   openmrsDraft: 'idle',
 };
 
-function formatEndpointForDisplay(endpoint: string): string {
-  try {
-    return new URL(endpoint, window.location.href).toString();
-  } catch {
-    return endpoint;
-  }
-}
-
 const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChange }) => {
   const { t, i18n } = useTranslation();
   const config = useConfig<Config>();
@@ -182,13 +173,8 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   const defaultLanguages = useMemo(() => clinicalLanguageDefaultsFromLocale(openmrsLocale), [openmrsLocale]);
   const languageSelectionTouched = useRef(false);
   const voiceSelectionTouched = useRef(false);
-  const livekitServerUrl = useMemo(
-    () => resolveLivekitServerUrl(config.livekitServerUrl),
-    [config.livekitServerUrl],
-  );
-  const tokenEndpoint = useMemo(() => resolveTokenEndpoint(config.tokenEndpoint), [config.tokenEndpoint]);
-  const tokenEndpointDisplay = useMemo(() => formatEndpointForDisplay(tokenEndpoint), [tokenEndpoint]);
-  const roomPrefix = config.roomPrefix || 'openmrs-voice-';
+  const livekitConfig = useMemo(() => resolveLivekitOperationalConfig(config), [config]);
+  const { livekitServerUrl, tokenEndpoint, roomPrefix } = livekitConfig;
   const demoFlowEnabled = Boolean(config.enableDemoFlow);
   const [token, setToken] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
@@ -328,86 +314,25 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   if (!token) {
     return (
       <div className={`${styles.panel} ${styles.preflightPanel}`}>
-        <Tile className={styles.preflightCard}>
-          <div className={styles.cardHeader}>
-            <h5>{t('configurations', 'Configurations')}</h5>
+        <Tile className={styles.languageCard}>
+          <h5>{t('consultationLanguages', 'Consultation languages')}</h5>
+          <div className={styles.languageControls}>
+            <LanguageToggle
+              label={t('doctorLanguage', 'Doctor language')}
+              value={doctorLanguage}
+              onChange={updateDoctorLanguage}
+            />
+            <LanguageToggle
+              label={t('patientLanguage', 'Patient language')}
+              value={patientLanguage}
+              onChange={updatePatientLanguage}
+            />
+            <LanguageToggle
+              label={t('agentVoiceLanguage', 'Agent voice')}
+              value={agentVoiceLanguage}
+              onChange={updateAgentVoiceLanguage}
+            />
           </div>
-          <p className={styles.description}>
-            {t(
-              'translationFlowDescription',
-              'Open a local LiveKit room, then run the doctor-patient translation and OpenMRS draft flow from this workspace.',
-            )}
-          </p>
-          <div className={styles.pipelinePreview}>
-            <Tag type="cyan" size="sm">
-              {t('localAi', 'Local AI')}
-            </Tag>
-            <Tag type="cyan" size="sm">
-              {t('sourceAttribution', 'Source attribution')}
-            </Tag>
-            <Tag type="blue" size="sm">
-              {t('livekitAudio', 'LiveKit audio')}
-            </Tag>
-            <Tag type="purple" size="sm">
-              {t('localStt', 'Local STT')}
-            </Tag>
-            <Tag type="cyan" size="sm">
-              {t('clinicalTranslation', 'Clinical translation')}
-            </Tag>
-            <Tag type="green" size="sm">
-              {t('localTts', 'Local TTS')}
-            </Tag>
-            <Tag type="gray" size="sm">
-              {t('openmrsDraft', 'OpenMRS draft')}
-            </Tag>
-          </div>
-          <div className={styles.roomLanguageConfig}>
-            <div>
-              <h6>{t('agentRoomLanguages', 'Agent room languages')}</h6>
-              <p>
-                {t(
-                  'agentRoomLanguagesDetail',
-                  'These values are written to LiveKit room metadata before the agent joins. The agent voice is fixed for the room and uses the configured Piper model when available.',
-                )}
-              </p>
-            </div>
-            <div className={styles.languageControls}>
-              <LanguageToggle
-                label={t('doctorLanguage', 'Doctor language')}
-                value={doctorLanguage}
-                onChange={updateDoctorLanguage}
-              />
-              <LanguageToggle
-                label={t('patientLanguage', 'Patient language')}
-                value={patientLanguage}
-                onChange={updatePatientLanguage}
-              />
-              <LanguageToggle
-                label={t('agentVoiceLanguage', 'Agent voice')}
-                value={agentVoiceLanguage}
-                onChange={updateAgentVoiceLanguage}
-              />
-            </div>
-          </div>
-          <dl className={styles.connectionDetails}>
-            <div>
-              <dt>{t('livekitServer', 'LiveKit')}</dt>
-              <dd>{livekitServerUrl}</dd>
-            </div>
-            <div>
-              <dt>{t('tokenServer', 'Token server')}</dt>
-              <dd>{tokenEndpoint}</dd>
-              {tokenEndpointDisplay !== tokenEndpoint && <small>{tokenEndpointDisplay}</small>}
-            </div>
-            <div>
-              <dt>{t('speakerAttribution', 'Speaker attribution')}</dt>
-              <dd>{t('sourceRoleWithSttSpeakerId', 'source-role + STT speaker_id')}</dd>
-            </div>
-            <div>
-              <dt>{t('roomPrefix', 'Room prefix')}</dt>
-              <dd>{roomPrefix}</dd>
-            </div>
-          </dl>
         </Tile>
 
         <PatientContext />

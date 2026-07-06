@@ -19,3 +19,13 @@ export const livekitVoiceButton = getAsyncLifecycle(() => import('./voice/voice-
 export const livekitVoicePanel = getAsyncLifecycle(() => import('./voice/voice-panel.component'), options);
 
 export const livekitVoiceModal = getAsyncLifecycle(() => import('./voice/voice-modal.component'), options);
+
+export const livekitAdminCardLink = getAsyncLifecycle(
+  () => import('./admin/livekit-admin-card-link.component'),
+  options,
+);
+
+export const livekitConfigurationPage = getAsyncLifecycle(
+  () => import('./admin/livekit-configuration-page.component'),
+  options,
+);
