@@ -62,6 +62,13 @@ import styles from './voice-panel.scss';
 
 interface VoicePanelProps {
   onClose?: () => void;
+  onPreflightActionsChange?: (actions: VoicePanelPreflightActions | null) => void;
+}
+
+export interface VoicePanelPreflightActions {
+  startDisabled: boolean;
+  startLabel: string;
+  onStart: () => void;
 }
 
 type LanguageCode = ClinicalLanguageCode;
@@ -171,7 +178,7 @@ function formatEndpointForDisplay(endpoint: string): string {
   }
 }
 
-const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
+const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChange }) => {
   const { t } = useTranslation();
   const config = useConfig<Config>();
   const { patient, isLoading: patientLoading } = usePatient();
@@ -223,27 +230,40 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
     setRoomName('');
   }, []);
 
-  if (!token) {
-    const startConsultationLabel = patientLoading
-      ? t('loadingPatient', 'Loading patient...')
-      : connecting
-        ? t('connecting', 'Connecting...')
-        : t('startConsultation', 'Start consultation');
+  const startConsultationLabel = patientLoading
+    ? t('loadingPatient', 'Loading patient...')
+    : connecting
+      ? t('connecting', 'Connecting...')
+      : t('startConsultation', 'Start consultation');
+  const startConsultationDisabled = patientLoading || connecting;
 
+  useEffect(() => {
+    if (!onPreflightActionsChange) {
+      return;
+    }
+
+    if (token) {
+      onPreflightActionsChange(null);
+      return;
+    }
+
+    onPreflightActionsChange({
+      startDisabled: startConsultationDisabled,
+      startLabel: startConsultationLabel,
+      onStart: connect,
+    });
+  }, [connect, onPreflightActionsChange, startConsultationDisabled, startConsultationLabel, token]);
+
+  useEffect(() => {
+    return () => onPreflightActionsChange?.(null);
+  }, [onPreflightActionsChange]);
+
+  if (!token) {
     return (
       <div className={`${styles.panel} ${styles.preflightPanel}`}>
-        <div className={styles.heroHeader}>
-          <div>
-            <h4 className={styles.title}>{t('voiceConsultation', 'Voice consultation')}</h4>
-          </div>
-        </div>
-
         <Tile className={styles.preflightCard}>
           <div className={styles.cardHeader}>
             <h5>{t('configurations', 'Configurations')}</h5>
-            <Tag type="cyan" size="sm">
-              {t('localAi', 'Local AI')}
-            </Tag>
           </div>
           <p className={styles.description}>
             {t(
@@ -252,6 +272,9 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
             )}
           </p>
           <div className={styles.pipelinePreview}>
+            <Tag type="cyan" size="sm">
+              {t('localAi', 'Local AI')}
+            </Tag>
             <Tag type="blue" size="sm">
               {t('livekitAudio', 'LiveKit audio')}
             </Tag>
@@ -287,16 +310,23 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
 
         <PatientContext />
         {error && <p className={styles.error}>{error}</p>}
-        <ButtonSet className={styles.preflightActions}>
-          {onClose && (
-            <Button kind="secondary" onClick={onClose}>
-              {t('close', 'Close')}
+        {!onPreflightActionsChange && (
+          <ButtonSet className={styles.preflightActions}>
+            {onClose && (
+              <Button kind="danger--ghost" onClick={onClose}>
+                {t('close', 'Close')}
+              </Button>
+            )}
+            <Button
+              kind="primary"
+              renderIcon={Microphone}
+              onClick={connect}
+              disabled={startConsultationDisabled}
+            >
+              {startConsultationLabel}
             </Button>
-          )}
-          <Button kind="primary" renderIcon={Microphone} onClick={connect} disabled={patientLoading || connecting}>
-            {startConsultationLabel}
-          </Button>
-        </ButtonSet>
+          </ButtonSet>
+        )}
       </div>
     );
   }

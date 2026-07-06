@@ -7,9 +7,7 @@
 }
 
 .contextHeader {
-  display: flex;
-  justify-content: space-between;
-  gap: layout.$spacing-04;
+  display: block;
 }
 
 .contextTitle {

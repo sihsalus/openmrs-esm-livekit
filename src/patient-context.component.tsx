@@ -81,11 +81,6 @@ const PatientContext: React.FC = () => {
           <h5 className={styles.contextTitle}>{t('clinicalContext', 'Clinical context')}</h5>
           <p className={styles.patientName}>{patientName}</p>
         </div>
-        {demographics.patientUuid && (
-          <Tag type="gray" size="sm">
-            {t('openmrsPatient', 'OpenMRS patient')}
-          </Tag>
-        )}
       </div>
       <dl className={styles.demographicsList}>
         {demographics.gender && (
