@@ -1,17 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { Tag, SkeletonText } from '@carbon/react';
+import { Tag, SkeletonText, Tile } from '@carbon/react';
 import { openmrsFetch, usePatient } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
 import styles from './patient-context.scss';
-import { buildPatientContextPaths, buildPatientSummary, FhirEntry, PatientSummary } from './patient-context';
+import {
+  buildPatientContextPaths,
+  buildPatientDemographics,
+  buildPatientSummary,
+  FhirEntry,
+  PatientSummary,
+} from './patient-context';
 
 const PatientContext: React.FC = () => {
   const { t } = useTranslation();
-  const { patient } = usePatient();
+  const { patient, isLoading: patientLoading } = usePatient();
   const [summary, setSummary] = useState<PatientSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const demographics = buildPatientDemographics(patient);
 
   useEffect(() => {
+    if (patientLoading) {
+      return;
+    }
+
     if (!patient?.id) {
       setSummary(null);
       setLoading(false);
@@ -45,25 +56,63 @@ const PatientContext: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [patient?.id]);
+  }, [patient?.id, patientLoading]);
 
-  if (loading) {
+  if (patientLoading || loading) {
     return (
-      <div className={styles.context}>
-        <SkeletonText heading width="40%" />
-        <SkeletonText paragraph lineCount={3} />
-      </div>
+      <Tile className={styles.contextCard}>
+        <SkeletonText heading width="35%" />
+        <SkeletonText paragraph lineCount={2} />
+        <SkeletonText paragraph lineCount={4} />
+      </Tile>
     );
   }
 
   if (!summary) return null;
 
+  const patientName = demographics.name || t('unknownPatient', 'Unknown patient');
   const isEmpty =
     summary.conditions.length === 0 && summary.allergies.length === 0 && summary.medications.length === 0;
 
   return (
-    <div className={styles.context}>
-      <h5 className={styles.contextTitle}>{t('patientContext', 'Patient context')}</h5>
+    <Tile className={styles.contextCard}>
+      <div className={styles.contextHeader}>
+        <div>
+          <h5 className={styles.contextTitle}>{t('clinicalContext', 'Clinical context')}</h5>
+          <p className={styles.patientName}>{patientName}</p>
+        </div>
+        {demographics.patientUuid && (
+          <Tag type="gray" size="sm">
+            {t('openmrsPatient', 'OpenMRS patient')}
+          </Tag>
+        )}
+      </div>
+      <dl className={styles.demographicsList}>
+        {demographics.gender && (
+          <div>
+            <dt>{t('sex', 'Sex')}</dt>
+            <dd>{demographics.gender}</dd>
+          </div>
+        )}
+        {typeof demographics.age === 'number' && (
+          <div>
+            <dt>{t('age', 'Age')}</dt>
+            <dd>{t('ageYears', '{{count}} years', { count: demographics.age })}</dd>
+          </div>
+        )}
+        {demographics.birthDate && (
+          <div>
+            <dt>{t('birthDate', 'Birth date')}</dt>
+            <dd>{demographics.birthDate}</dd>
+          </div>
+        )}
+        {demographics.identifiers.slice(0, 2).map((identifier) => (
+          <div key={`${identifier.label}-${identifier.value}`}>
+            <dt>{identifier.label}</dt>
+            <dd>{identifier.value}</dd>
+          </div>
+        ))}
+      </dl>
       {isEmpty ? (
         <p className={styles.emptyState}>
           {t('noPatientContext', 'No active conditions, allergies, or medications on file.')}
@@ -90,7 +139,7 @@ const PatientContext: React.FC = () => {
           />
         </div>
       )}
-    </div>
+    </Tile>
   );
 };
 

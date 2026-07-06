@@ -17,7 +17,7 @@ Returns local service status for the frontend status panel.
 ```json
 {
   "status": "ok",
-  "roomPrefix": "iot-device-",
+  "roomPrefix": "openmrs-voice-",
   "offline": true,
   "livekit": "ok",
   "openmrs": "ok",
@@ -129,7 +129,7 @@ The metadata payload intentionally stays minimal:
 ```json
 {
   "patientUuid": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
-  "roomPrefix": "iot-device-",
+  "roomPrefix": "openmrs-voice-",
   "source": "openmrs-livekit-token-server"
 }
 ```
@@ -142,7 +142,7 @@ continue while logs expose the missing metadata path.
 ```json
 {
   "patientUuid": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
-  "roomPrefix": "iot-device-"
+  "roomPrefix": "openmrs-voice-"
 }
 ```
 
@@ -207,7 +207,7 @@ Records a local consent manifest for a future recording workflow. It does not ca
 ```json
 {
   "patientUuid": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
-  "roomName": "iot-device-aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
+  "roomName": "openmrs-voice-aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
   "consentCaptured": true
 }
 ```

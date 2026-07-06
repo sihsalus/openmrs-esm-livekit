@@ -97,7 +97,7 @@ The helper listens on port `7890` by default. The frontend derives these default
 
 - LiveKit WebSocket: `ws(s)://<current-browser-host>:7880`
 - Token endpoint: `http(s)://<current-browser-host>:7890/token`
-- Room prefix: `iot-device-`
+- Room prefix: `openmrs-voice-`
 
 For any shared demo, staging, or production deployment, enable the helper
 readiness gate and configure browser origins explicitly:

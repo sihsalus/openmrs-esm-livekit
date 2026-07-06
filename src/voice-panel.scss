@@ -11,21 +11,20 @@
   gap: layout.$spacing-04;
 }
 
+.preflightPanel {
+  padding: 0;
+}
+
 .title {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
 }
 
-.patientName {
-  color: var(--cds-text-secondary);
-  margin: 0 0 layout.$spacing-04;
-}
-
 .connectionDetails {
   display: grid;
   gap: layout.$spacing-03;
-  margin: 0 0 layout.$spacing-04;
+  margin: 0;
 
   div {
     display: grid;
@@ -42,6 +41,13 @@
     font-family: monospace;
     font-size: 0.75rem;
     margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  small {
+    color: var(--cds-text-helper);
+    font-family: monospace;
+    font-size: 0.75rem;
     overflow-wrap: anywhere;
   }
 }
@@ -61,6 +67,25 @@
   gap: layout.$spacing-04;
 }
 
+.preflightCard {
+  display: grid;
+  gap: layout.$spacing-04;
+  width: 100%;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: layout.$spacing-04;
+
+  h5 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0;
+  }
+}
+
 .description {
   color: var(--cds-text-secondary);
   font-size: 0.875rem;
@@ -72,6 +97,15 @@
   display: flex;
   flex-wrap: wrap;
   gap: layout.$spacing-03;
+}
+
+.preflightActions {
+  justify-content: flex-end;
+  width: 100%;
+
+  button {
+    max-width: 12rem;
+  }
 }
 
 /* ---- Active session ---- */

@@ -66,7 +66,7 @@ LIVEKIT_API_SECRET_CONFIGURED = bool(os.environ.get("LIVEKIT_API_SECRET"))
 API_KEY = os.environ.get("LIVEKIT_API_KEY", DEFAULT_DEV_API_KEY)
 API_SECRET = os.environ.get("LIVEKIT_API_SECRET", DEFAULT_DEV_API_SECRET)
 PORT = int(os.environ.get("TOKEN_SERVER_PORT", "7890"))
-ROOM_PREFIX = os.environ.get("LIVEKIT_ROOM_PREFIX", "iot-device-")
+ROOM_PREFIX = os.environ.get("LIVEKIT_ROOM_PREFIX", "openmrs-voice-")
 LIVEKIT_HTTP_URL = os.environ.get("LIVEKIT_HTTP_URL", "").strip().rstrip("/")
 LIVEKIT_ROOM_METADATA_TIMEOUT_SECONDS = float(
     os.environ.get("LIVEKIT_ROOM_METADATA_TIMEOUT_SECONDS", "2")

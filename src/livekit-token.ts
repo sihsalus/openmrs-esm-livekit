@@ -70,7 +70,7 @@ export async function saveOpenmrsDraft(
 }
 
 export function buildRoomName(patientUuid: string, roomPrefix: string): string {
-  const prefix = roomPrefix?.trim() || 'iot-device-';
+  const prefix = roomPrefix?.trim() || 'openmrs-voice-';
   const safePatientUuid = patientUuid.replace(/[^a-zA-Z0-9_-]/g, '-');
   return `${prefix}${safePatientUuid}`;
 }

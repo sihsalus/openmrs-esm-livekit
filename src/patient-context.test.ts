@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildPatientContextPaths, buildPatientSummary, isActiveMedicationRequest } from './patient-context';
+import {
+  buildPatientContextPaths,
+  buildPatientDemographics,
+  buildPatientSummary,
+  isActiveMedicationRequest,
+} from './patient-context';
 
 describe('patient context FHIR helpers', () => {
   it('does not use the MedicationRequest status search parameter', () => {
@@ -41,6 +46,33 @@ describe('patient context FHIR helpers', () => {
       conditions: ['Hypertension'],
       allergies: ['Penicillin'],
       medications: ['Metformin'],
+    });
+  });
+
+  it('builds patient demographics from stable FHIR Patient fields', () => {
+    expect(
+      buildPatientDemographics(
+        {
+          id: 'patient-uuid',
+          name: [{ given: ['Joshua'], family: 'Johnson' }],
+          gender: 'male',
+          birthDate: '1980-07-10',
+          identifier: [
+            {
+              type: { text: 'OpenMRS ID' },
+              value: '100GEJ',
+            },
+          ],
+        },
+        new Date('2026-07-06T00:00:00Z'),
+      ),
+    ).toEqual({
+      name: 'Joshua Johnson',
+      age: 45,
+      gender: 'Male',
+      birthDate: '1980-07-10',
+      patientUuid: 'patient-uuid',
+      identifiers: [{ label: 'OpenMRS ID', value: '100GEJ' }],
     });
   });
 });
