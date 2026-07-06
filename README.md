@@ -24,7 +24,7 @@ privacy matters, and bilingual encounters are common.
 | Helper service  | Local Python service for LiveKit tokens, health/readiness, PHI redaction, synthetic consultations, encounter compilation, draft queueing, and optional OpenMRS writes.          |
 | Realtime agent  | Companion repository: [sihsalus/openmrs-livekit](https://github.com/sihsalus/openmrs-livekit). It owns STT, LLM/tool calls, TTS, data-channel events, and OpenMRS draft events. |
 | Safety boundary | Assistive documentation only. Drafts are queued for clinician review and are not written to OpenMRS unless explicitly configured and requested.                                 |
-| Demo data       | Deterministic synthetic consultations for demos and end-to-end checks without real patient data.                                                                                |
+| Synthetic data  | Deterministic synthetic consultations for validation and end-to-end checks without real patient data.                                                                           |
 
 ## What It Does
 
@@ -95,9 +95,10 @@ Known defaults in this repository:
   environment.
 - OpenMRS base deployment sets the CPU agent `LLM_PROVIDER=ollama`.
 
-The base agent prompt lives in the companion agent repository. The current demo
-targets Spanish clinical encounters in a Latin American OpenMRS setting and can
-be replaced by site-specific session instructions in the agent layer.
+The base agent prompt lives in the companion agent repository. The current
+reference configuration targets Spanish clinical encounters in a Latin American
+OpenMRS setting and can be replaced by site-specific session instructions in the
+agent layer.
 
 ## Clinical Safety and Privacy
 
@@ -144,8 +145,8 @@ the frontend derives:
 | Token endpoint    | `http(s)://<current-browser-host>:7890/token` |
 | Room prefix       | `openmrs-voice-`                              |
 
-For any shared demo, staging, or production deployment, enable the readiness gate
-and configure browser origins explicitly:
+For any shared evaluation, staging, or production deployment, enable the
+readiness gate and configure browser origins explicitly:
 
 ```bash
 TOKEN_SERVER_ENV=production
@@ -157,7 +158,7 @@ LIVEKIT_API_SECRET=<site-livekit-api-secret>
 Production mode fails fast if LiveKit signing credentials or the CORS allowlist
 are missing. The helper also creates local draft, recording manifest, and audit
 JSONL files with owner-only permissions (`0600`). That is useful for a
-semi-production demo host, but it is not a substitute for encrypted storage in a
+controlled evaluation host, but it is not a substitute for encrypted storage in a
 regulated deployment.
 
 ## Configuration
@@ -206,14 +207,14 @@ automatic doctor/patient diarization.
 ## Helper Service Contracts
 
 The helper is not the realtime conversational agent. It provides local contracts
-that support the frontend, demo, and smoke tests.
+that support the frontend, validation workflows, and smoke tests.
 
 | Endpoint                       | Contract                                                                                                                                   |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `GET /health`                  | Reports LiveKit, OpenMRS, Ollama, agent, STT/TTS, token signing, CORS, local storage, draft audit, and production readiness status.        |
 | `POST /token`                  | Returns an HS256 LiveKit JWT with a room-scoped join grant and optional room metadata sync.                                                |
 | `POST /compile-encounter`      | Redacts PHI-like text and compiles a clinician-reviewable OpenMRS draft using Ollama when available or deterministic heuristics otherwise. |
-| `POST /synthetic-consultation` | Generates deterministic synthetic dialogue, redacted transcript, draft, and an `openmrsDraftRequest` for demos and e2e tests.              |
+| `POST /synthetic-consultation` | Generates deterministic synthetic dialogue, redacted transcript, draft, and an `openmrsDraftRequest` for validation and e2e tests.         |
 | `POST /recording/session`      | Records a consent manifest for future recording workflow; it does not capture or store raw audio by default.                               |
 | `POST /openmrs/draft`          | Queues a draft locally by default and can optionally create an OpenMRS encounter through `/openmrs/ws/rest/v1`.                            |
 
@@ -224,7 +225,7 @@ Important helper environment variables:
 | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`  | LiveKit token signing. Missing values fall back to LiveKit dev defaults only in development mode. |
 | `LIVEKIT_HTTP_URL`                       | Optional LiveKit HTTP API URL for best-effort room metadata sync.                                 |
 | `LIVEKIT_ROOM_PREFIX`                    | Room prefix shared by frontend, helper, and agent.                                                |
-| `TOKEN_SERVER_ENV`                       | Set to `production` for shared demos and production-like deployments.                             |
+| `TOKEN_SERVER_ENV`                       | Set to `production` for shared evaluation and production-like deployments.                        |
 | `TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG` | Enables production readiness checks without changing `TOKEN_SERVER_ENV`.                          |
 | `TOKEN_SERVER_ALLOWED_ORIGINS`           | Comma-separated browser origins accepted by CORS. Required for production readiness.              |
 | `OLLAMA_MODEL`                           | Model name used by helper `/compile-encounter` when Ollama is available.                          |
@@ -289,8 +290,8 @@ npm view @sihsalus/esm-livekit-app version
 Set `OPENMRS_LIVEKIT_FRONTEND_VERSION` only to a version that is actually
 published on npm. If a release tag builds successfully but npm publish fails, the
 OpenMRS frontend can temporarily serve a locally built `dist/` directory via the
-importmap for demo recovery, but that hotfix is not the long-term reproducible
-path.
+importmap for deployment recovery, but that hotfix is not the long-term
+reproducible path.
 
 Install into the OpenMRS distro:
 
@@ -323,8 +324,8 @@ docker logs openmrs-distro-referenceapplication-livekit-helper-1
 docker logs openmrs-distro-referenceapplication-livekit-agent-cpu-1
 ```
 
-For HTTPS demos, route LiveKit through the gateway WebSocket proxy and use a
-browser-trusted hostname:
+For HTTPS deployments, route LiveKit through the gateway WebSocket proxy and use
+a browser-trusted hostname:
 
 ```bash
 SSL_MODE=dev
@@ -378,7 +379,7 @@ make the project production-ready by itself.
 
 ### Automated Helper Smoke
 
-Start the helper with the same environment used by the demo:
+Start the helper with the same environment used by the target deployment:
 
 ```bash
 LIVEKIT_API_KEY=<key> LIVEKIT_API_SECRET=<secret> python3 token-server/server.py
@@ -396,7 +397,7 @@ The smoke test verifies:
 - `/token` returns an HS256 LiveKit JWT with a room-scoped join grant.
 - `/compile-encounter` redacts name, email, phone, local document IDs, and
   OpenMRS ID values.
-- `/synthetic-consultation` returns synthetic, redacted demo data.
+- `/synthetic-consultation` returns synthetic, redacted consultation data.
 - `/openmrs/draft` queues a clinician-reviewed draft without writing to OpenMRS.
 
 ### Real Environment Preflight
@@ -421,7 +422,7 @@ Required preflight checks:
 2. `livekitServerUrl` is `wss://` for shared environments.
 3. `tokenEndpoint` is `https://` for shared environments.
 4. Helper runs with `TOKEN_SERVER_ENV=production` or
-   `TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG=true` for shared demos.
+   `TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG=true` for shared evaluations.
 5. Helper `/health` shows configured LiveKit token signing and a non-permissive
    CORS allowlist for the OpenMRS browser origin.
 6. Frontend `roomPrefix`, helper `LIVEKIT_ROOM_PREFIX`, and agent
@@ -464,11 +465,10 @@ Required preflight checks:
 13. Reload the patient chart and verify the saved or queued draft state is
     explainable to a clinician reviewer.
 
-### Demo Logs
+### Deployment Logs
 
-For the self-hosted demo stack, use container logs to verify the browser,
-LiveKit, helper, and agent path without storing raw clinical audio or transcript
-text:
+For the self-hosted stack, use container logs to verify the browser, LiveKit,
+helper, and agent path without storing raw clinical audio or transcript text:
 
 ```bash
 docker logs -f openmrs-distro-referenceapplication-gateway-1
@@ -489,7 +489,7 @@ Useful signals:
 - Agent: room connection, metadata parsing, prompt budgeting, readiness status,
   TTS/STT/LLM timing, and transcript-save policy.
 
-The expected demo logging posture is metadata and operational status only.
+The expected deployment logging posture is metadata and operational status only.
 Helper and agent logs must not include raw transcript text, draft text, or
 unredacted patient identifiers.
 
@@ -547,7 +547,7 @@ Expected result:
 
 ### Go / No-Go Criteria
 
-Go for a hackathon demo only if all are true:
+Ready for supervised evaluation only if all are true:
 
 - Browser joins the room without mixed-content errors.
 - Microphone publishes audio and the agent receives it.
@@ -583,11 +583,12 @@ No-go if any are true:
 - Local clinical NER with site dictionaries. Current redaction is deterministic
   pattern matching with local Spanish healthcare identifiers.
 
-## Open-Source Scribe Benchmark
+## Competitive Review
 
-This benchmark records the open-source projects reviewed before the hackathon
-test freeze. The goal is to borrow practical product patterns without replacing
-the OpenMRS-first architecture.
+This review covers adjacent open-source medical scribe projects. It is a
+technical positioning exercise, not a claim that any project has been clinically
+validated or is production-ready for regulated care without site-specific
+security, privacy, and clinical governance review.
 
 OpenMRS LiveKit is not trying to become a generic commercial ambient scribe. Its
 specific product wedge is:
@@ -601,12 +602,25 @@ OpenMRS O3 patient chart
   -> clinician review before OpenMRS write
 ```
 
-| Project                                                                   | License    | What matters                                                                                                                        | Reuse decision                                                                                  |
-| ------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [Berta AI Scribe](https://github.com/phairlab/berta-ai-scribe)            | Apache 2.0 | FastAPI + Next.js scribe with local/cloud model paths, templates, auth, AWS deployment, and deployment paper.                       | Use as architecture and deployment benchmark. Do not port wholesale before the demo.            |
-| [Open Medical Scribe](https://github.com/BirgerMoell/open-medical-scribe) | MIT        | Pluggable STT and note providers, local/cloud/hybrid modes, FHIR DocumentReference export, audit logging, and multiple note styles. | Reuse ideas for provider boundaries, audit events, and future FHIR export.                      |
-| [scribeHC](https://github.com/trevorpfiz/scribeHC)                        | MIT        | Mobile recording plus dashboard workflow using Expo, Next.js, FastAPI, and SOAP note editing.                                       | Useful UX reference only; OpenMRS O3 already owns this frontend surface.                        |
-| [AI-Scribe](https://github.com/1984Doc/AI-Scribe)                         | GPL-3.0    | Local Whisper and local LLM scribe pattern.                                                                                         | Reference only. Do not copy code into this repo because GPL would change licensing obligations. |
+Snapshot reviewed on 2026-07-06:
+
+| Project                                                                   | License    | Competitive assessment                                                                                                                                                                                                                                                                       | Relevance to OpenMRS LiveKit                                                                                                                                                                          |
+| ------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Berta AI Scribe](https://github.com/phairlab/berta-ai-scribe)            | Apache 2.0 | Strongest deployment reference among the reviewed projects: FastAPI + Next.js, authentication, local/cloud model options, storage choices, AWS path, and explicit security posture. Its scope is broader than this repository, and OpenMRS integration is not the center of gravity.         | Treat as an architecture and deployment benchmark. Reuse patterns around auth, storage, deployment hardening, and operational documentation; avoid copying product scope wholesale.                   |
+| [Open Medical Scribe](https://github.com/BirgerMoell/open-medical-scribe) | MIT        | Strongest modular product reference: pluggable STT/LLM providers, local/cloud/hybrid operation, streaming transcription, CLI tools, FHIR DocumentReference export, privacy controls, and multiple note formats. Community footprint is still small, but the technical direction is mature.   | Reuse ideas for provider interfaces, note quality workflows, audit events, local/cloud switching, and future FHIR export. Keep OpenMRS encounter payloads as this project's primary integration path. |
+| [scribeHC](https://github.com/trevorpfiz/scribeHC)                        | MIT        | Useful application workflow reference: Expo mobile capture, Next.js dashboard, FastAPI processing, authentication, and SOAP note editing. Less relevant as a core competitor because it is organized around a separate mobile/dashboard product rather than embedded OpenMRS O3 workflow.    | Use as a UX and workflow reference for recording, queue review, and note editing. Do not replace the OpenMRS-native frontend surface with a parallel app.                                             |
+| [AI-Scribe](https://github.com/1984Doc/AI-Scribe)                         | GPL-3.0    | Useful historical/local-first reference: Python client/server, Whisper/Kobold-style local processing, PHI scrubbing additions, and single-machine setup. It is less modular and less suitable as an integration benchmark; GPL-3.0 also creates licensing constraints for direct code reuse. | Reference only for local processing patterns and failure modes. Do not copy code into this MPL-2.0 repository.                                                                                        |
+
+Positioning conclusion:
+
+- Berta AI Scribe and Open Medical Scribe are credible technical benchmarks.
+- Open Medical Scribe is the strongest source of reusable product architecture
+  ideas, especially provider boundaries, note formats, and FHIR export.
+- Berta AI Scribe is the stronger deployment and operations benchmark.
+- scribeHC is useful for mobile capture and dashboard workflow patterns, but is
+  not as close to the OpenMRS O3 embedded use case.
+- AI-Scribe validates demand for local-first scribing, but is not a direct
+  architecture target for this codebase.
 
 Adopted now:
 
@@ -631,11 +645,13 @@ Later product work:
 - Add optional FHIR export where OpenMRS implementations prefer FHIR resources
   over REST encounter payloads.
 
-## Hackathon Demo
+## Clinical Use Case
 
-For the OpenMRS AI Hackathon demo, the project shows OpenMRS, LiveKit, and local
-AI services running locally. It generates a synthetic bilingual consultation,
-redacts patient identifiers, and produces a reviewable OpenMRS encounter draft.
+The primary use case is point-of-care voice support inside the OpenMRS O3
+patient chart. The system can run with local AI services, generate synthetic
+bilingual consultations for validation, redact patient identifiers, and produce
+a reviewable OpenMRS encounter draft.
 
-The submission focus is the Clinical Track: point-of-care voice support,
-offline-capable AI, translation, and clinician-reviewed documentation assistance.
+The product focus is offline-capable clinical documentation assistance:
+clinician-controlled audio capture, translation support, PHI-aware transcript
+handling, evidence-backed drafts, and explicit review before any OpenMRS write.

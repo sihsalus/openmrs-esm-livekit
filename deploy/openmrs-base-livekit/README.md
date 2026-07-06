@@ -1,7 +1,7 @@
 # OpenMRS Base LiveKit Stack
 
-These files make the hackathon demo reproducible against the OpenMRS base
-Reference Application stack without committing site secrets.
+These files make the self-hosted OpenMRS LiveKit stack reproducible against the
+OpenMRS base Reference Application stack without committing site secrets.
 
 ## Inputs
 
@@ -43,8 +43,8 @@ rerun the failed tag job only after confirming the token permission.
 
 If the current source has not been published to npm yet, build the local bundle
 and update the OpenMRS importmap as a temporary hotfix instead of relying on the
-assembly version. Keep this as a short-lived demo workaround; the reproducible
-path is still the npm package version above.
+assembly version. Keep this as a short-lived deployment workaround; the
+reproducible path is still the npm package version above.
 
 If the package has been published but a full OpenMRS frontend rebuild fails on
 unrelated `@openmrs/*` registry timeouts, deploy the published npm tarball as the
@@ -113,8 +113,8 @@ The script updates:
 - `deploy/livekit/livekit-docker.yaml` with the constrained UDP port range.
 - `.env` with LiveKit credentials, allowed origins, audit salt, and paths.
 
-For HTTPS demos, use the OpenMRS distro SSL compose file and route LiveKit through
-the gateway WebSocket proxy:
+For HTTPS deployments, use the OpenMRS distro SSL compose file and route LiveKit
+through the gateway WebSocket proxy:
 
 ```bash
 SSL_MODE=dev

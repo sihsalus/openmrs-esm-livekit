@@ -1,6 +1,8 @@
 # OpenMRS LiveKit Helper Service
 
-Local helper used by the OpenMRS LiveKit prototype. It keeps the existing LiveKit token endpoint and exposes demo-ready local AI contracts for the hackathon flow.
+Local helper service for OpenMRS LiveKit. It keeps the existing LiveKit token
+endpoint and exposes local AI contracts for validation and self-hosted
+deployments.
 
 Default base URL on the PowerEdge:
 
@@ -44,7 +46,7 @@ This helper is not the real-time conversational agent. The LiveKit agent in
 `sihsalus/openmrs-livekit` owns STT, LLM tool calls, TTS, and data-channel draft
 events.
 
-The helper provides local contracts that support the demo and smoke tests:
+The helper provides local contracts that support validation and smoke tests:
 
 - LiveKit token signing.
 - Health/readiness reporting.
@@ -60,7 +62,8 @@ The frontend and helper do not embed model secrets in browser code.
 
 ## Production readiness gate
 
-For shared demos, staging, or production, run with production checks enabled:
+For shared evaluations, staging, or production, run with production checks
+enabled:
 
 ```bash
 TOKEN_SERVER_ENV=production
@@ -81,7 +84,7 @@ Production mode rejects missing LiveKit credentials, LiveKit development
 defaults (`devkey` / `secret`), missing CORS allowlists, and non-HTTPS
 allowlisted origins except localhost/loopback.
 
-In development mode, CORS remains permissive for local demos but `/health`
+In development mode, CORS remains permissive for local development but `/health`
 returns a warning until `TOKEN_SERVER_ALLOWED_ORIGINS` is configured.
 
 ## Local storage
@@ -104,13 +107,15 @@ AUDIT_HASH_SALT=<site-managed-secret>
 ```
 
 For shared or regulated deployments, `AUDIT_HASH_SALT` should come from the
-site secrets manager. The default salt is only suitable for synthetic demo data.
+site secrets manager. The default salt is only suitable for synthetic validation
+data.
 
 ### POST /token
 
 Existing LiveKit token endpoint.
 
-For shared demos, staging, or production, configure LiveKit signing credentials explicitly:
+For shared evaluations, staging, or production, configure LiveKit signing
+credentials explicitly:
 
 ```bash
 LIVEKIT_API_KEY=<livekit-api-key>
@@ -172,7 +177,7 @@ instead of claiming automatic diarization.
 
 If the LiveKit room already exists, the helper updates room metadata instead of
 failing the token request. If metadata sync fails, `/token` still returns the
-browser token and includes `roomMetadata.status: "error"` so the demo can
+browser token and includes `roomMetadata.status: "error"` so the session can
 continue while logs expose the missing metadata path.
 
 ```json
@@ -227,12 +232,14 @@ Response:
 
 ### POST /synthetic-consultation
 
-Generates deterministic synthetic doctor-patient dialogue and a clinician-reviewable draft. This is for demos and e2e tests without real patient data.
+Generates deterministic synthetic doctor-patient dialogue and a
+clinician-reviewable draft. This is for validation and e2e tests without real
+patient data.
 
 ```json
 {
   "caseId": "pediatric-respiratory",
-  "patientUuid": "synthetic-demo-patient"
+  "patientUuid": "synthetic-validation-patient"
 }
 ```
 
