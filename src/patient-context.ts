@@ -57,7 +57,10 @@ export function buildPatientContextPaths(patientId: string): {
   };
 }
 
-export function buildPatientDemographics(patient: PatientLike | null | undefined, now = new Date()): PatientDemographics {
+export function buildPatientDemographics(
+  patient: PatientLike | null | undefined,
+  now = new Date(),
+): PatientDemographics {
   const identifiers = patient?.identifier ?? [];
   const birthDate = patient?.birthDate;
 

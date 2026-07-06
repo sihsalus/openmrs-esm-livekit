@@ -12,12 +12,7 @@ export type ClinicalLanguageDefaults = {
 };
 
 export const openmrsLocaleFromI18n = (i18n: LocaleSource | undefined) => {
-  return (
-    i18n?.resolvedLanguage ||
-    i18n?.languages?.find(Boolean) ||
-    i18n?.language ||
-    ''
-  );
+  return i18n?.resolvedLanguage || i18n?.languages?.find(Boolean) || i18n?.language || '';
 };
 
 export const clinicalLanguageFromLocale = (
@@ -55,6 +50,5 @@ export const clinicalLanguageDefaultsFromLocale = (
   };
 };
 
-export const clinicalLanguageDefaultsFromOpenmrsLocale = (
-  i18n: LocaleSource | undefined,
-) => clinicalLanguageDefaultsFromLocale(openmrsLocaleFromI18n(i18n));
+export const clinicalLanguageDefaultsFromOpenmrsLocale = (i18n: LocaleSource | undefined) =>
+  clinicalLanguageDefaultsFromLocale(openmrsLocaleFromI18n(i18n));
