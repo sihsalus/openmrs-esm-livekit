@@ -24,8 +24,8 @@ const VoiceModal: React.FC<VoiceModalProps> = ({ close }) => {
       </ModalBody>
       {preflightActions && (
         <ModalFooter className={styles.modalFooter}>
-          <Button kind="danger--ghost" onClick={closeModal}>
-            {t('close', 'Close')}
+          <Button kind="secondary" onClick={closeModal}>
+            {t('cancel', 'Cancel')}
           </Button>
           <Button
             kind="primary"

@@ -15,6 +15,7 @@
   "microphoneUnavailableShort": "Microphone unavailable",
   "loadingPatient": "Loading patient...",
   "failedToConnect": "Failed to connect",
+  "cancel": "Cancel",
   "close": "Close",
   "livekitConnectionHint": "Check LiveKit reachability and gateway CSP connect-src for the LiveKit WebSocket URL.",
   "livekitServer": "LiveKit",
