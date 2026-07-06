@@ -6,17 +6,7 @@ import {
   useLocalParticipant,
 } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
-import {
-  Button,
-  Tag,
-  Tile,
-  TextArea,
-  TextInput,
-  Accordion,
-  AccordionItem,
-  ButtonSet,
-  InlineNotification,
-} from '@carbon/react';
+import { Button, Tag, Tile, TextArea, TextInput, Accordion, AccordionItem, ButtonSet } from '@carbon/react';
 import {
   Microphone,
   MicrophoneOff,
@@ -187,7 +177,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   const config = useConfig<Config>();
   const { patient, isLoading: patientLoading } = usePatient();
   const patientUuid = patient?.id ?? '';
-  const { activeVisit, error: activeVisitError, isLoading: activeVisitLoading } = useVisit(patientUuid);
+  const { activeVisit, isLoading: activeVisitLoading } = useVisit(patientUuid);
   const openmrsLocale = openmrsLocaleFromI18n(i18n);
   const defaultLanguages = useMemo(() => clinicalLanguageDefaultsFromLocale(openmrsLocale), [openmrsLocale]);
   const languageSelectionTouched = useRef(false);
@@ -421,22 +411,6 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
         </Tile>
 
         <PatientContext />
-        {!patientLoading && patientUuid && !shouldWaitForVisit && !activeVisitUuid && (
-          <InlineNotification
-            kind="warning"
-            lowContrast
-            hideCloseButton
-            title={t('activeVisitRequired', 'Active visit required')}
-            subtitle={
-              activeVisitError
-                ? t(
-                    'activeVisitLookupFailed',
-                    'Could not confirm an active visit. Refresh the chart or start a visit before using voice consultation.',
-                  )
-                : activeVisitRequiredMessage
-            }
-          />
-        )}
         {error && <p className={styles.error}>{error}</p>}
         {!onPreflightActionsChange && (
           <ButtonSet className={styles.preflightActions}>
