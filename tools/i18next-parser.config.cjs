@@ -1,0 +1,17 @@
+module.exports = {
+  contextSeparator: '_',
+  createOldCatalogs: false,
+  defaultNamespace: 'translations',
+  defaultValue: '',
+  indentation: 2,
+  keepRemoved: true,
+  keySeparator: '.',
+  lineEnding: 'auto',
+  locales: ['en', 'es'],
+  namespaceSeparator: ':',
+  output: 'translations/$LOCALE.json',
+  pluralSeparator: '_',
+  sort: true,
+  verbose: false,
+  failOnWarnings: false,
+};

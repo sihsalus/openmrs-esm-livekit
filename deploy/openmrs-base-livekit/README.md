@@ -71,7 +71,13 @@ Optional CPU-only AI settings:
 ```bash
 OLLAMA_MODEL=qwen2.5:1.5b
 WHISPER_MODEL_SIZE=base
+PIPER_MODEL_PATH_EN=/srv/piper/voices/en_US-lessac-medium.onnx
 ```
+
+The CPU agent image currently bundles the Spanish Piper voice used by
+`PIPER_MODEL_PATH_ES`. Set `PIPER_MODEL_PATH_EN` only after adding or mounting an
+English Piper model at that path. `PIPER_MODEL_PATH` is a legacy fallback and is
+not set by the compose file.
 
 ## Install Into The OpenMRS Distro
 

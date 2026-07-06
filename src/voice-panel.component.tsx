@@ -52,7 +52,8 @@ import {
   microphoneUnavailableMessage,
 } from './microphone-availability';
 import {
-  clinicalLanguageDefaultsFromOpenmrsLocale,
+  clinicalLanguageDefaultsFromLocale,
+  openmrsLocaleFromI18n,
   type ClinicalLanguageCode,
 } from './clinical-language';
 import { shouldAttemptInitialMicrophoneEnable } from './microphone-control';
@@ -184,10 +185,10 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   const { t, i18n } = useTranslation();
   const config = useConfig<Config>();
   const { patient, isLoading: patientLoading } = usePatient();
-  const localeKey = `${i18n.resolvedLanguage || ''}|${i18n.language || ''}|${i18n.languages?.join(',') || ''}`;
+  const openmrsLocale = openmrsLocaleFromI18n(i18n);
   const defaultLanguages = useMemo(
-    () => clinicalLanguageDefaultsFromOpenmrsLocale(i18n),
-    [i18n, localeKey],
+    () => clinicalLanguageDefaultsFromLocale(openmrsLocale),
+    [openmrsLocale],
   );
   const languageSelectionTouched = useRef(false);
   const voiceSelectionTouched = useRef(false);
