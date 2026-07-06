@@ -21,6 +21,7 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "medgemma:latest")
 OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "45"))
 OPENMRS_BASE_URL = os.environ.get("OPENMRS_BASE_URL", "http://127.0.0.1/openmrs").rstrip("/")
 LIVEKIT_HTTP_URL = os.environ.get("LIVEKIT_HTTP_URL", "http://127.0.0.1:7880").rstrip("/")
+LIVEKIT_AGENT_HEALTH_URL = os.environ.get("LIVEKIT_AGENT_HEALTH_URL", "").strip()
 DRAFT_STORE_PATH = os.environ.get("DRAFT_STORE_PATH", "/tmp/openmrs-livekit-drafts.jsonl")
 RECORDING_MANIFEST_PATH = os.environ.get(
     "RECORDING_MANIFEST_PATH", "/tmp/openmrs-livekit-recordings.jsonl"
@@ -125,6 +126,11 @@ SYNTHETIC_CASES: dict[str, dict[str, Any]] = {
 def build_health_response(room_prefix: str) -> dict[str, Any]:
     ollama = _probe_ollama()
     livekit = _probe_http(LIVEKIT_HTTP_URL, expect_json=False)
+    agent = (
+        _probe_http(LIVEKIT_AGENT_HEALTH_URL, expect_json=False)
+        if LIVEKIT_AGENT_HEALTH_URL
+        else {"status": "pending"}
+    )
     openmrs = _probe_http(f"{OPENMRS_BASE_URL}/ws/rest/v1/session", expect_json=True)
     stt_engine = _first_command(["whisper-cli", "whisper.cpp", "whisper", "vosk-transcriber"])
     tts_engine = _first_command(["piper", "espeak-ng"])
@@ -150,7 +156,7 @@ def build_health_response(room_prefix: str) -> dict[str, Any]:
             "contract": "POST /compile-encounter",
         },
         "agent": {
-            "status": "pending",
+            **agent,
             "roomPrefix": room_prefix,
             "contract": "LiveKit data-channel topic agent-data",
         },

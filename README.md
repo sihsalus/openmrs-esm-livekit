@@ -49,7 +49,7 @@ to LiveKit and consumes `agent-data` messages from the LiveKit agent.
 Current model selection lives in the agent/helper configuration:
 
 - Agent default LLM: `LLM_PROVIDER=openai` with `OPENAI_MODEL=gpt-4.1-mini`.
-- Local-first demo LLM: `LLM_PROVIDER=ollama` with `OLLAMA_MODEL=qwen3:8b`, or
+- Local-first demo LLM: `LLM_PROVIDER=ollama` with `OLLAMA_MODEL=qwen2.5:1.5b`, or
   another local model selected by the site.
 - Helper `/compile-encounter`: uses local Ollama when available and falls back to
   deterministic heuristics for demos/tests.

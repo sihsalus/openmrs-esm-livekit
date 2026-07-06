@@ -226,6 +226,7 @@ class TokenServerE2ETest(unittest.TestCase):
         cls.openmrs_server, cls.openmrs_url = start_server(FakeOpenMRSHandler)
         cls.ollama_server, cls.ollama_url = start_server(FakeOllamaHandler)
         cls.livekit_server, cls.livekit_url = start_server(FakeLiveKitHandler)
+        cls.agent_server, cls.agent_url = start_server(FakeLiveKitHandler)
         cls.tempdir = tempfile.TemporaryDirectory()
         cls.port = free_port()
         cls.base_url = f"http://127.0.0.1:{cls.port}"
@@ -242,6 +243,7 @@ class TokenServerE2ETest(unittest.TestCase):
                 "OLLAMA_MODEL": "medgemma:test",
                 "OPENMRS_BASE_URL": f"{cls.openmrs_url}/openmrs",
                 "LIVEKIT_HTTP_URL": cls.livekit_url,
+                "LIVEKIT_AGENT_HEALTH_URL": f"{cls.agent_url}/metrics",
                 "DRAFT_STORE_PATH": str(Path(cls.tempdir.name) / "drafts.jsonl"),
                 "RECORDING_MANIFEST_PATH": str(Path(cls.tempdir.name) / "recordings.jsonl"),
                 "AUDIT_LOG_PATH": str(Path(cls.tempdir.name) / "audit.jsonl"),
@@ -294,6 +296,7 @@ class TokenServerE2ETest(unittest.TestCase):
         cls.openmrs_server.shutdown()
         cls.ollama_server.shutdown()
         cls.livekit_server.shutdown()
+        cls.agent_server.shutdown()
         cls.tempdir.cleanup()
 
     def test_health_reports_local_services_and_contracts(self):
@@ -304,6 +307,7 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["services"]["cors"]["status"], "configured")
         self.assertEqual(payload["services"]["cors"]["allowedOrigins"], ["https://openmrs.test"])
         self.assertEqual(payload["services"]["productionReadiness"]["status"], "enforced")
+        self.assertEqual(payload["services"]["agent"]["status"], "ok")
         self.assertEqual(payload["services"]["agent"]["contract"], "LiveKit data-channel topic agent-data")
         self.assertEqual(payload["services"]["openmrsDraftWrite"]["status"], "configured")
         self.assertEqual(payload["services"]["draftAudit"]["status"], "enabled")
