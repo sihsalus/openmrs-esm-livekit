@@ -54,6 +54,7 @@ import {
   clinicalLanguageDefaultsFromOpenmrsLocale,
   type ClinicalLanguageCode,
 } from './clinical-language';
+import { shouldAttemptInitialMicrophoneEnable } from './microphone-control';
 import AudioVisualizer from './audio-visualizer.component';
 import PatientContext from './patient-context.component';
 import type { Config } from './config-schema';
@@ -359,6 +360,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const microphoneAvailable = isBrowserMicrophoneAvailable();
   const timeouts = useRef<number[]>([]);
   const lastAppliedAgentDraft = useRef<EncounterDraft | null>(null);
+  const initialMicrophoneEnableAttempted = useRef(false);
   const {
     transcripts: agentTranscripts,
     agentDraft,
@@ -399,11 +401,26 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   }, []);
 
   useEffect(() => {
-    if (connectionState !== ConnectionState.Connected || !localParticipant || !muted) {
+    const connected = connectionState === ConnectionState.Connected;
+    if (!connected) {
+      initialMicrophoneEnableAttempted.current = false;
+      return;
+    }
+
+    if (
+      !shouldAttemptInitialMicrophoneEnable({
+        connected,
+        hasLocalParticipant: Boolean(localParticipant),
+        muted,
+        attempted: initialMicrophoneEnableAttempted.current,
+      }) ||
+      !localParticipant
+    ) {
       return;
     }
 
     if (!microphoneAvailable) {
+      initialMicrophoneEnableAttempted.current = true;
       setMicError(microphoneUnavailableMessage(t));
       return;
     }
@@ -414,11 +431,13 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       try {
         await localParticipant.setMicrophoneEnabled(true);
         if (!cancelled) {
+          initialMicrophoneEnableAttempted.current = true;
           setMuted(false);
           setMicError(null);
         }
       } catch (err) {
         if (!cancelled) {
+          initialMicrophoneEnableAttempted.current = true;
           setMicError(microphoneErrorMessage(err, t));
         }
       }
