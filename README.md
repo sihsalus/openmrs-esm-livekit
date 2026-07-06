@@ -1,77 +1,119 @@
 # OpenMRS LiveKit Voice Assistant
 
-OpenMRS LiveKit is a local-first clinical voice assistant for OpenMRS O3. It opens a LiveKit audio room from the patient chart, runs a doctor-patient voice workflow, redacts PHI-like text, and produces a structured OpenMRS encounter draft for clinician review.
+<p align="center">
+  <img alt="OpenMRS O3" src="https://img.shields.io/badge/OpenMRS-O3-00A0DF">
+  <img alt="LiveKit realtime voice" src="https://img.shields.io/badge/LiveKit-realtime_voice-111827">
+  <img alt="Local first" src="https://img.shields.io/badge/privacy-local_first-15803d">
+  <img alt="Clinician review" src="https://img.shields.io/badge/safety-clinician_review-b45309">
+  <img alt="License MPL 2.0" src="https://img.shields.io/badge/license-MPL--2.0-blue">
+</p>
 
-The project is designed for clinics where internet connectivity is unreliable, privacy matters, and clinicians may need bilingual support during patient encounters.
+OpenMRS LiveKit is a local-first clinical voice assistant for OpenMRS O3. It
+opens a patient-scoped LiveKit audio room from the chart, supports a
+doctor-patient voice workflow, redacts PHI-like text, and produces a structured
+OpenMRS encounter draft for clinician review.
 
-## What it does
+The project is designed for clinics where internet connectivity is unreliable,
+privacy matters, and bilingual encounters are common.
 
-- Starts a patient-scoped LiveKit audio room from an OpenMRS O3 frontend extension.
-- Supports a local AI workflow for speech-to-text, clinical translation, text-to-speech, and encounter drafting.
-- Generates a redacted transcript and a structured draft with chief complaint, symptoms, medications, allergies, assessment notes, and patient instructions.
-- Queues drafts for clinician review instead of writing autonomous documentation directly to the chart.
+## At a Glance
+
+| Area            | Current behavior                                                                                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend        | OpenMRS O3 microfrontend with Carbon UI, LiveKit room controls, patient context, privacy status, transcript, and draft review.                                                  |
+| Helper service  | Local Python service for LiveKit tokens, health/readiness, PHI redaction, synthetic consultations, encounter compilation, draft queueing, and optional OpenMRS writes.          |
+| Realtime agent  | Companion repository: [sihsalus/openmrs-livekit](https://github.com/sihsalus/openmrs-livekit). It owns STT, LLM/tool calls, TTS, data-channel events, and OpenMRS draft events. |
+| Safety boundary | Assistive documentation only. Drafts are queued for clinician review and are not written to OpenMRS unless explicitly configured and requested.                                 |
+| Demo data       | Deterministic synthetic consultations for demos and end-to-end checks without real patient data.                                                                                |
+
+## What It Does
+
+- Starts a patient-scoped LiveKit audio room from an OpenMRS O3 extension.
+- Derives safe defaults for LiveKit URL, token endpoint, room prefix, and
+  clinical language metadata.
+- Supports local-first speech-to-text, clinical translation, text-to-speech, and
+  encounter drafting through the LiveKit agent and helper service.
+- Consumes `agent-data` LiveKit data-channel messages for agent status,
+  transcript payloads, clinical facts, and drafts.
+- Redacts PHI-like identifiers before generated text is displayed or queued.
+- Builds reviewable drafts with chief complaint, symptoms, medications,
+  allergies, assessment notes, patient instructions, facts, missing fields, and
+  review queue items.
 - Avoids storing raw audio by default.
-- Includes deterministic synthetic consultation data for demos and end-to-end checks without real patient data.
+- Queues drafts locally and can optionally write OpenMRS encounter payloads only
+  when write mode, credentials, and OpenMRS metadata are configured.
 
 ## Architecture
 
-The prototype has two parts:
+```mermaid
+flowchart LR
+  chart[OpenMRS O3 patient chart] --> mfe[esm-livekit-app]
+  mfe --> room[LiveKit room]
+  room --> agent[LiveKit AI agent]
+  agent --> helper[local helper service]
+  helper --> draft[redacted encounter draft]
+  draft --> review[clinician review queue]
+  review --> openmrs[(optional OpenMRS encounter write)]
 
-- `src/`: OpenMRS O3 microfrontend that renders the voice button, modal, patient context, LiveKit room, local AI workflow, privacy status, and draft review UI.
-- `token-server/`: local helper service that issues LiveKit tokens and exposes demo-ready AI endpoints for health checks, translation, STT/TTS contracts, PHI redaction, synthetic consultations, and OpenMRS draft queueing.
-
-The conversational AI agent lives in the companion repository:
-
-https://github.com/sihsalus/openmrs-livekit
-
-That agent owns the real-time AI loop: STT, LLM reasoning/tool calls, TTS, data
-channel publication, and OpenMRS draft events. This frontend uses Carbon UI for
-the clinical review console and should not contain model secrets or run the
-foundation model in the browser.
-
-Typical local flow:
+  helper -. health/token/draft .-> mfe
+  agent -. agent-data topic .-> mfe
+```
 
 ```text
 OpenMRS O3 patient chart
   -> LiveKit room
   -> LiveKit AI agent
   -> local helper service
-  -> configured model provider / Ollama-compatible drafting
+  -> configured model provider or Ollama-compatible drafting
   -> redacted encounter draft
   -> clinician review queue
 ```
 
+Repository layout:
+
+| Path                           | Purpose                                                                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/`                         | OpenMRS O3 microfrontend, LiveKit token client, room UI, patient context, agent data parsing, draft review UI, and tests.             |
+| `token-server/`                | Local helper service, local AI contracts, synthetic data, redaction, draft queue/write bridge, smoke tests, and e2e contract tests.   |
+| `deploy/openmrs-base-livekit/` | Reproducible OpenMRS base stack integration with LiveKit server, CPU agent, helper service, gateway routes, CSP, and frontend config. |
+| `translations/`                | English and Spanish UI messages.                                                                                                      |
+
 ## AI Model Boundary
 
-The frontend does not hardcode a foundation model. It connects the OpenMRS chart
-to LiveKit and consumes `agent-data` messages from the LiveKit agent.
+The browser frontend does not hardcode or run a foundation model. It connects the
+OpenMRS chart to LiveKit, sends room metadata, and consumes agent data-channel
+events. Model provider selection belongs to the companion agent and helper
+configuration.
 
-Current model selection lives in the agent/helper configuration:
+Known defaults in this repository:
 
-- Agent default LLM: `LLM_PROVIDER=openai` with `OPENAI_MODEL=gpt-4.1-mini`.
-- Local-first demo LLM: `LLM_PROVIDER=ollama` with `OLLAMA_MODEL=qwen2.5:1.5b`, or
-  another local model selected by the site.
-- Helper `/compile-encounter`: uses local Ollama when available and falls back to
-  deterministic heuristics for demos/tests.
+- Standalone helper `/compile-encounter`: `OLLAMA_MODEL` defaults to
+  `medgemma:latest` and falls back to deterministic heuristics when Ollama is not
+  reachable.
+- OpenMRS base deployment: the helper and CPU agent default
+  `OLLAMA_MODEL` to `qwen2.5:1.5b` unless overridden in the deployment
+  environment.
+- OpenMRS base deployment sets the CPU agent `LLM_PROVIDER=ollama`.
 
-The base agent prompt is Spanish because the current demo targets Spanish
-clinical encounters in a Latin American OpenMRS setting. It improves the default
-behavior for local clinical wording, negations, and identifiers such as `D.N.I.`
-and `H.C.`. It can be replaced by site-specific session instructions in the
-agent layer.
+The base agent prompt lives in the companion agent repository. The current demo
+targets Spanish clinical encounters in a Latin American OpenMRS setting and can
+be replaced by site-specific session instructions in the agent layer.
 
-## Clinical safety model
+## Clinical Safety and Privacy
 
-The generated draft is not an autonomous diagnosis and is not written directly to the medical record by default. The helper queues the draft locally and returns an OpenMRS encounter payload preview. A real OpenMRS write requires explicit configuration and a write request.
+| Control          | Implementation posture                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| Raw audio        | Not stored by default. Recording requires explicit consent workflow and storage controls.                       |
+| PHI-like text    | Deterministic redaction for helper-generated text and synthetic identifiers.                                    |
+| Drafts           | Clinician-reviewable queue by default, not autonomous charting.                                                 |
+| OpenMRS writes   | Disabled by default. Requires explicit write request plus enabled server configuration.                         |
+| Audit events     | Draft lifecycle events exclude transcript and draft text; patient references are hashed.                        |
+| Local-first mode | Supported for offline-capable deployments through local LiveKit, agent, helper, and Ollama-compatible drafting. |
 
-Privacy defaults:
+This project is not a diagnostic system and does not make autonomous clinical
+decisions. Generated output must be reviewed by a clinician before charting.
 
-- Raw audio is not stored by default.
-- PHI-like identifiers are redacted from generated text.
-- Local-only processing is supported for offline-capable deployments.
-- Clinician review is required before final charting.
-
-## Getting started
+## Quick Start
 
 Install frontend dependencies:
 
@@ -93,14 +135,17 @@ token-server/.venv/bin/pip install -r token-server/requirements.txt
 LIVEKIT_API_KEY=<key> LIVEKIT_API_SECRET=<secret> token-server/.venv/bin/python token-server/server.py
 ```
 
-The helper listens on port `7890` by default. The frontend derives these defaults when config is left blank:
+The helper listens on port `7890` by default. When OpenMRS config is left blank,
+the frontend derives:
 
-- LiveKit WebSocket: `ws(s)://<current-browser-host>:7880`
-- Token endpoint: `http(s)://<current-browser-host>:7890/token`
-- Room prefix: `openmrs-voice-`
+| Setting           | Derived default                               |
+| ----------------- | --------------------------------------------- |
+| LiveKit WebSocket | `ws(s)://<current-browser-host>:7880`         |
+| Token endpoint    | `http(s)://<current-browser-host>:7890/token` |
+| Room prefix       | `openmrs-voice-`                              |
 
-For any shared demo, staging, or production deployment, enable the helper
-readiness gate and configure browser origins explicitly:
+For any shared demo, staging, or production deployment, enable the readiness gate
+and configure browser origins explicitly:
 
 ```bash
 TOKEN_SERVER_ENV=production
@@ -110,41 +155,130 @@ LIVEKIT_API_SECRET=<site-livekit-api-secret>
 ```
 
 Production mode fails fast if LiveKit signing credentials or the CORS allowlist
-are missing.
-
-The helper also creates local draft and recording manifest files with owner-only
-permissions (`0600`). That is enough for a semi-production demo host, but not a
-replacement for encrypted storage in a regulated deployment.
+are missing. The helper also creates local draft, recording manifest, and audit
+JSONL files with owner-only permissions (`0600`). That is useful for a
+semi-production demo host, but it is not a substitute for encrypted storage in a
+regulated deployment.
 
 ## Configuration
 
 The OpenMRS module config schema exposes:
 
-- `livekitServerUrl`: LiveKit WebSocket URL.
-- `tokenEndpoint`: helper endpoint used to request LiveKit room tokens.
-- `roomPrefix`: LiveKit room prefix joined by the local agent.
+| Config key         | Meaning                                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| `livekitServerUrl` | LiveKit WebSocket URL. Leave blank to derive the browser-host default.                               |
+| `tokenEndpoint`    | Helper endpoint used to request LiveKit room tokens. Leave blank to derive the browser-host default. |
+| `roomPrefix`       | LiveKit room prefix joined by the local agent. Defaults to `openmrs-voice-`.                         |
 
 At consultation start, the microfrontend derives default clinician, patient, and
 agent voice languages from the active OpenMRS locale. English is the default
-unless the OpenMRS locale is Spanish (`es`, `es-PE`, `es_MX`, etc.). The user
-can adjust the values before the room is created. The helper sends
-`doctorLanguage`, `patientLanguage`, and `agentVoiceLanguage` in room metadata
-and declares `speakerAttributionMode=source-role`.
+unless the OpenMRS locale is Spanish (`es`, `es-PE`, `es_MX`, etc.). The user can
+adjust the values before the room is created.
 
-The current browser microphone is requested as `captureRole=doctor`. If the STT
-provider emits a `speaker_id`, the agent includes that speaker id and attribution
-source in transcript payloads. If no `speaker_id` is available, the transcript
-falls back to the configured default human role instead of pretending that
-doctor/patient diarization happened.
+The token request sends:
 
-The helper supports optional OpenMRS draft write configuration. See [token-server/README.md](token-server/README.md) for endpoint contracts, OpenMRS write safeguards, and environment variables.
+```json
+{
+  "patientUuid": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
+  "roomName": "openmrs-voice-aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
+  "roomPrefix": "openmrs-voice-",
+  "doctorLanguage": "es",
+  "patientLanguage": "en",
+  "agentVoiceLanguage": "es",
+  "captureRole": "doctor",
+  "defaultHumanRole": "doctor",
+  "speakerAttributionMode": "source-role"
+}
+```
+
+The helper normalizes `doctorLanguage`, `patientLanguage`, and
+`agentVoiceLanguage` to supported base codes (`en` and `es`). Unsupported patient
+languages fall back to the normalized clinician language. If `LIVEKIT_HTTP_URL`
+is configured, the helper performs a best-effort LiveKit room metadata sync
+before returning the browser token.
+
+The browser microphone is requested as `captureRole=doctor`. If the STT provider
+emits a `speaker_id`, the agent can include `speakerId`, attribution mode, and
+attribution source in transcript payloads. If no speaker ID is available, the
+transcript falls back to the configured default human role instead of claiming
+automatic doctor/patient diarization.
+
+## Helper Service Contracts
+
+The helper is not the realtime conversational agent. It provides local contracts
+that support the frontend, demo, and smoke tests.
+
+| Endpoint                       | Contract                                                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /health`                  | Reports LiveKit, OpenMRS, Ollama, agent, STT/TTS, token signing, CORS, local storage, draft audit, and production readiness status.        |
+| `POST /token`                  | Returns an HS256 LiveKit JWT with a room-scoped join grant and optional room metadata sync.                                                |
+| `POST /compile-encounter`      | Redacts PHI-like text and compiles a clinician-reviewable OpenMRS draft using Ollama when available or deterministic heuristics otherwise. |
+| `POST /synthetic-consultation` | Generates deterministic synthetic dialogue, redacted transcript, draft, and an `openmrsDraftRequest` for demos and e2e tests.              |
+| `POST /recording/session`      | Records a consent manifest for future recording workflow; it does not capture or store raw audio by default.                               |
+| `POST /openmrs/draft`          | Queues a draft locally by default and can optionally create an OpenMRS encounter through `/openmrs/ws/rest/v1`.                            |
+
+Important helper environment variables:
+
+| Variable                                 | Use                                                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`  | LiveKit token signing. Missing values fall back to LiveKit dev defaults only in development mode. |
+| `LIVEKIT_HTTP_URL`                       | Optional LiveKit HTTP API URL for best-effort room metadata sync.                                 |
+| `LIVEKIT_ROOM_PREFIX`                    | Room prefix shared by frontend, helper, and agent.                                                |
+| `TOKEN_SERVER_ENV`                       | Set to `production` for shared demos and production-like deployments.                             |
+| `TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG` | Enables production readiness checks without changing `TOKEN_SERVER_ENV`.                          |
+| `TOKEN_SERVER_ALLOWED_ORIGINS`           | Comma-separated browser origins accepted by CORS. Required for production readiness.              |
+| `OLLAMA_MODEL`                           | Model name used by helper `/compile-encounter` when Ollama is available.                          |
+| `DRAFT_STORE_PATH`                       | Local JSONL draft queue path.                                                                     |
+| `RECORDING_MANIFEST_PATH`                | Local JSONL recording consent manifest path.                                                      |
+| `AUDIT_LOG_PATH`                         | Draft lifecycle audit JSONL path.                                                                 |
+| `AUDIT_HASH_SALT`                        | Site-managed salt for hashed patient references in audit events.                                  |
+
+Optional OpenMRS write configuration:
+
+```bash
+OPENMRS_DRAFT_WRITE_ENABLED=true
+OPENMRS_ENCOUNTER_TYPE_UUID=<encounter-type-uuid>
+OPENMRS_LOCATION_UUID=<location-uuid>
+OPENMRS_DRAFT_OBS_CONCEPT_UUID=<text-concept-uuid-for-ai-draft>
+OPENMRS_PROVIDER_UUID=<provider-uuid>
+OPENMRS_ENCOUNTER_ROLE_UUID=<encounter-role-uuid>
+OPENMRS_STRUCTURED_OBS_CONCEPTS='{"chiefComplaint":"...","symptoms":"...","medicationsMentioned":"...","allergiesMentioned":"...","assessmentNotes":"...","patientInstructions":"..."}'
+```
+
+To request a real OpenMRS write, send `writeToOpenmrs: true` or
+`mode: "write"`. The server writes only when `OPENMRS_DRAFT_WRITE_ENABLED=true`
+and required OpenMRS metadata are configured. Authentication can come from
+`OPENMRS_USERNAME` and `OPENMRS_PASSWORD`, `OPENMRS_BASIC_AUTH`, or the forwarded
+OpenMRS browser session cookie.
+
+Draft lifecycle audit event types:
+
+- `draft_queued`: draft was queued locally without an OpenMRS write.
+- `draft_saved`: OpenMRS accepted the encounter create request.
+- `draft_write_rejected`: an OpenMRS write was requested but blocked or rejected
+  by configuration, authentication, patient lookup, or the OpenMRS REST API.
 
 ## OpenMRS Base Deployment
 
 The reproducible OpenMRS base stack lives in
-[deploy/openmrs-base-livekit](deploy/openmrs-base-livekit). It adds the LiveKit
-server, CPU agent, helper/token service, gateway routes, CSP, and frontend module
-configuration without committing site secrets.
+`deploy/openmrs-base-livekit`. It adds the LiveKit server, CPU agent,
+helper/token service, gateway routes, CSP, and frontend module configuration
+without committing site secrets.
+
+Set these values in the OpenMRS distro `.env` or export them before running
+Docker Compose:
+
+```bash
+OPENMRS_DISTRO_ROOT=/path/to/openmrs-distro-referenceapplication
+OPENMRS_ESM_LIVEKIT_PATH=/path/to/openmrs-esm-livekit
+OPENMRS_LIVEKIT_AGENT_PATH=/path/to/openmrs-livekit
+LIVEKIT_HOST=<browser-reachable-host>
+OPENMRS_LIVEKIT_SERVER_URL=<optional-browser-wss-livekit-url>
+LIVEKIT_API_KEY=<site-livekit-api-key>
+LIVEKIT_API_SECRET=<site-livekit-api-secret>
+AUDIT_HASH_SALT=<site-managed-random-salt>
+OPENMRS_PASSWORD=<openmrs-admin-password>
+```
 
 The normal frontend deployment path is npm:
 
@@ -153,10 +287,57 @@ npm view @sihsalus/esm-livekit-app version
 ```
 
 Set `OPENMRS_LIVEKIT_FRONTEND_VERSION` only to a version that is actually
-published on npm. If a release tag builds successfully but npm publish fails,
-the OpenMRS frontend can temporarily serve a locally built `dist/` directory via
-the importmap for demo recovery, but that hotfix is not the long-term
-reproducible path.
+published on npm. If a release tag builds successfully but npm publish fails, the
+OpenMRS frontend can temporarily serve a locally built `dist/` directory via the
+importmap for demo recovery, but that hotfix is not the long-term reproducible
+path.
+
+Install into the OpenMRS distro:
+
+```bash
+mkdir -p "$OPENMRS_DISTRO_ROOT/deploy/livekit"
+cp deploy/openmrs-base-livekit/*.yml "$OPENMRS_DISTRO_ROOT/deploy/livekit/"
+cp deploy/openmrs-base-livekit/*.Dockerfile "$OPENMRS_DISTRO_ROOT/deploy/livekit/"
+
+OPENMRS_DISTRO_ROOT="$OPENMRS_DISTRO_ROOT" \
+LIVEKIT_HOST="$LIVEKIT_HOST" \
+python3 deploy/openmrs-base-livekit/configure_base_livekit.py
+```
+
+Run from the OpenMRS distro root:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/livekit/build.yml \
+  -f deploy/livekit/livekit.yml \
+  up -d --build
+```
+
+Verify:
+
+```bash
+docker compose ps
+curl http://localhost:7890/health
+docker logs openmrs-distro-referenceapplication-livekit-helper-1
+docker logs openmrs-distro-referenceapplication-livekit-agent-cpu-1
+```
+
+For HTTPS demos, route LiveKit through the gateway WebSocket proxy and use a
+browser-trusted hostname:
+
+```bash
+SSL_MODE=dev
+CERT_WEB_DOMAINS=openmrs.example.org,localhost
+CERT_WEB_DOMAIN_COMMON_NAME=openmrs.example.org
+OPENMRS_LIVEKIT_SERVER_URL=wss://openmrs.example.org/livekit-sfu
+TOKEN_SERVER_ALLOWED_ORIGINS=https://openmrs.example.org,http://openmrs.example.org
+```
+
+The deployed bundle should include the OpenMRS base FHIR workaround: it fetches
+`MedicationRequest?patient=<uuid>&_count=20` and filters active medication
+requests locally instead of sending `status=active` to the base distro FHIR
+endpoint.
 
 ## Tests
 
@@ -172,7 +353,10 @@ Run the helper contract tests:
 yarn test:e2e:token-server
 ```
 
-The helper e2e test starts fake local OpenMRS, Ollama, and LiveKit services, then validates health checks, PHI redaction, synthetic data generation, recording consent, CORS, and an authenticated OpenMRS encounter write against the fake REST API.
+The helper e2e test starts fake local OpenMRS, Ollama, and LiveKit services, then
+validates health checks, PHI redaction, synthetic data generation, recording
+consent, CORS, and an authenticated OpenMRS encounter write against the fake REST
+API.
 
 Run a smoke test against a real running helper:
 
@@ -180,12 +364,278 @@ Run a smoke test against a real running helper:
 yarn test:smoke:token-server
 ```
 
-For the full browser, LiveKit, agent, and OpenMRS acceptance checklist, see [docs/e2e-smoke-test.md](docs/e2e-smoke-test.md).
+For a remote helper:
 
-For the 2026 open-source scribe benchmark and reuse decisions, see [docs/open-source-benchmark.md](docs/open-source-benchmark.md).
+```bash
+TOKEN_SERVER_SMOKE_URL=https://helper.example.org yarn test:smoke:token-server
+```
 
-## Hackathon demo
+## End-to-End Smoke Test
 
-For the OpenMRS AI Hackathon demo, the project shows OpenMRS, LiveKit, and local AI services running locally. It generates a synthetic bilingual consultation, redacts patient identifiers, and produces a reviewable OpenMRS encounter draft.
+This checklist is the minimum bar before presenting the prototype as tested in a
+real environment. It complements automated unit and contract tests; it does not
+make the project production-ready by itself.
 
-The submission focus is the Clinical Track: point-of-care voice support, offline-capable AI, translation, and clinician-reviewed documentation assistance.
+### Automated Helper Smoke
+
+Start the helper with the same environment used by the demo:
+
+```bash
+LIVEKIT_API_KEY=<key> LIVEKIT_API_SECRET=<secret> python3 token-server/server.py
+```
+
+Run:
+
+```bash
+yarn test:smoke:token-server
+```
+
+The smoke test verifies:
+
+- `/health` reports the `agent-data` data-channel contract.
+- `/token` returns an HS256 LiveKit JWT with a room-scoped join grant.
+- `/compile-encounter` redacts name, email, phone, local document IDs, and
+  OpenMRS ID values.
+- `/synthetic-consultation` returns synthetic, redacted demo data.
+- `/openmrs/draft` queues a clinician-reviewed draft without writing to OpenMRS.
+
+### Real Environment Preflight
+
+Use only synthetic patient data. Record these values before the browser smoke:
+
+```text
+OpenMRS URL:
+LiveKit WebSocket URL:
+Token endpoint:
+Agent command/container:
+Room prefix:
+Synthetic patient UUID:
+OpenMRS encounter type UUID:
+OpenMRS location UUID:
+Draft obs concept UUID:
+```
+
+Required preflight checks:
+
+1. OpenMRS is served over HTTPS, or every service is localhost-only.
+2. `livekitServerUrl` is `wss://` for shared environments.
+3. `tokenEndpoint` is `https://` for shared environments.
+4. Helper runs with `TOKEN_SERVER_ENV=production` or
+   `TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG=true` for shared demos.
+5. Helper `/health` shows configured LiveKit token signing and a non-permissive
+   CORS allowlist for the OpenMRS browser origin.
+6. Frontend `roomPrefix`, helper `LIVEKIT_ROOM_PREFIX`, and agent
+   `LIVEKIT_ROOM_PREFIX` match exactly.
+7. Agent process is running with the intended STT, LLM, and TTS providers.
+8. Browser microphone permission is granted and visible in the browser site
+   settings.
+
+### Manual Browser Smoke
+
+1. Open a synthetic patient chart and launch the LiveKit voice panel.
+2. Confirm the health panel shows LiveKit, token server, local storage, agent,
+   OpenMRS, and draft write readiness.
+3. Confirm the agent publishes an `agent_connected` or `agent_listening` status
+   on the `agent-data` data-channel topic before the first transcript.
+4. Speak this synthetic utterance through the browser microphone:
+
+   ```text
+   Paciente: Maria Fernanda Quispe, H.C. A-998877, vive en Av. Los Incas 123.
+   Tiene tos seca desde hace cinco dias. Niega alergias a medicamentos.
+   Toma paracetamol 500 mg cada ocho horas.
+   ```
+
+5. Confirm the live transcript arrives on the `agent-data` data-channel topic.
+6. Confirm patient identifiers are redacted before display or draft persistence:
+   `Maria Fernanda Quispe`, `A-998877`, and `Av. Los Incas 123` must not appear
+   in frontend transcript text, stored evidence snippets, queued draft text, or
+   helper logs.
+7. Confirm negation is preserved: `niega alergias` must not become a positive
+   allergy.
+8. Confirm medication and dose are preserved for review:
+   `paracetamol 500 mg cada ocho horas`.
+9. Confirm the draft shows missing fields and review queue items.
+10. Queue the draft and verify no OpenMRS write occurs unless explicitly
+    enabled.
+11. Confirm the helper writes a `draft_queued`, `draft_saved`, or
+    `draft_write_rejected` audit event without transcript or draft text.
+12. If write mode is enabled, verify the created encounter uses the expected
+    patient, encounter type, location, provider, role, and concept UUIDs.
+13. Reload the patient chart and verify the saved or queued draft state is
+    explainable to a clinician reviewer.
+
+### Demo Logs
+
+For the self-hosted demo stack, use container logs to verify the browser,
+LiveKit, helper, and agent path without storing raw clinical audio or transcript
+text:
+
+```bash
+docker logs -f openmrs-distro-referenceapplication-gateway-1
+docker logs -f openmrs-distro-referenceapplication-livekit-helper-1
+docker logs -f openmrs-distro-referenceapplication-livekit-1
+docker logs -f openmrs-distro-referenceapplication-livekit-agent-cpu-1
+docker logs -f openmrs-distro-referenceapplication-backend-1
+```
+
+Useful signals:
+
+- Gateway: static microfrontend chunks, `/livekit/token`, `/livekit/health`, and
+  OpenMRS REST/FHIR status codes.
+- Helper: token, health, synthetic consultation, compile, and draft queue
+  requests.
+- LiveKit: browser participant joins, agent assignment, ICE/UDP connection type,
+  track publication, and room close reason.
+- Agent: room connection, metadata parsing, prompt budgeting, readiness status,
+  TTS/STT/LLM timing, and transcript-save policy.
+
+The expected demo logging posture is metadata and operational status only.
+Helper and agent logs must not include raw transcript text, draft text, or
+unredacted patient identifiers.
+
+### Known Weakness Validation
+
+Room metadata validation:
+
+```bash
+docker logs openmrs-distro-referenceapplication-livekit-helper-1 \
+  | grep -E "LiveKit room metadata (created|updated)"
+docker logs openmrs-distro-referenceapplication-livekit-agent-cpu-1 \
+  | grep -E "Metadata parsed|Room metadata derived from room name|Room metadata empty|Sending initial greeting"
+```
+
+Expected result:
+
+- Helper logs `LiveKit room metadata created` or `updated` for rooms opened from
+  the OpenMRS microfrontend when `LIVEKIT_HTTP_URL` is configured.
+- Agent logs `Metadata parsed` when LiveKit room metadata is available.
+- The helper room metadata includes normalized `doctorLanguage`,
+  `patientLanguage`, `agentVoiceLanguage`, `languageMode`,
+  `speakerAttributionMode`, and `defaultHumanRole`.
+- English is the expected default when OpenMRS does not expose a Spanish locale.
+  Spanish OpenMRS locales such as `es`, `es-PE`, or `es_MX` should produce
+  Spanish room metadata.
+- The agent uses `doctorLanguage` for STT language hints, `agentVoiceLanguage`
+  for the initial greeting and assistant transcript language labels, and
+  `patientLanguage` for patient-facing translation context.
+- Agent may log `Room metadata derived from room name` as a non-blocking
+  fallback for rooms named with the configured prefix, for example
+  `openmrs-voice-<patientUuid>`.
+- `Room metadata empty` should only appear for rooms that do not match the
+  configured agent room prefix or cannot expose a patient UUID safely.
+- Transcript payloads should include `speakerId` and
+  `attributionMode=stt-speaker-id` when the STT provider emits speaker IDs. If
+  no speaker ID is available, the payload should include
+  `attributionSource=missing-speaker-id` and fall back to `defaultHumanRole`.
+  That fallback is intentionally not presented as automatic diarization.
+
+OpenMRS base FHIR MedicationRequest validation:
+
+```bash
+curl -I "$OPENMRS_BASE_URL/ws/fhir2/R4/MedicationRequest?patient=<uuid>&_count=20"
+curl -I "$OPENMRS_BASE_URL/ws/fhir2/R4/MedicationRequest?patient=<uuid>&status=active&_count=20"
+```
+
+Expected result:
+
+- The first request should return `200`.
+- On the observed OpenMRS base distro with `fhir2-api-4.1.0`, the second request
+  can return `500` due to a backend `NullPointerException`.
+- The microfrontend avoids that backend bug by fetching MedicationRequest
+  without the `status` search parameter and filtering `status === "active"`
+  locally.
+
+### Go / No-Go Criteria
+
+Go for a hackathon demo only if all are true:
+
+- Browser joins the room without mixed-content errors.
+- Microphone publishes audio and the agent receives it.
+- Agent publishes readiness status over `agent-data`.
+- At least one transcript and one draft arrive in the frontend.
+- Synthetic identifiers are redacted before display or persistence.
+- Draft remains reviewable and does not write to OpenMRS unless explicitly
+  enabled.
+- Draft lifecycle audit events are present and exclude raw transcript/draft
+  content.
+- If OpenMRS write is enabled, the encounter appears under the synthetic patient
+  with the configured metadata and concept UUIDs.
+
+No-go if any are true:
+
+- Browser requires cleartext `ws://` or `http://` outside localhost.
+- Token server accepts an unexpected browser origin in shared environments.
+- Agent joins a different room prefix than the frontend.
+- Raw synthetic identifiers appear in transcript, draft, logs, or JSONL queues.
+- Audit JSONL events contain transcript text or draft text.
+- `niega alergias` becomes a positive allergy.
+- OpenMRS write occurs without explicit operator action and configuration.
+
+### Not Covered
+
+- Browser-to-agent media quality across real clinic networks.
+- LiveKit SFU TLS termination and certificate rotation.
+- Application-level end-to-end media encryption.
+- Encryption at rest for queued drafts, transcripts, logs, or recording
+  manifests.
+- Full OpenMRS role-based access review.
+- Clinical validation by a clinician.
+- Local clinical NER with site dictionaries. Current redaction is deterministic
+  pattern matching with local Spanish healthcare identifiers.
+
+## Open-Source Scribe Benchmark
+
+This benchmark records the open-source projects reviewed before the hackathon
+test freeze. The goal is to borrow practical product patterns without replacing
+the OpenMRS-first architecture.
+
+OpenMRS LiveKit is not trying to become a generic commercial ambient scribe. Its
+specific product wedge is:
+
+```text
+OpenMRS O3 patient chart
+  -> LiveKit realtime room
+  -> local-first AI workflow
+  -> PHI-like redaction
+  -> evidence-backed encounter draft
+  -> clinician review before OpenMRS write
+```
+
+| Project                                                                   | License    | What matters                                                                                                                        | Reuse decision                                                                                  |
+| ------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [Berta AI Scribe](https://github.com/phairlab/berta-ai-scribe)            | Apache 2.0 | FastAPI + Next.js scribe with local/cloud model paths, templates, auth, AWS deployment, and deployment paper.                       | Use as architecture and deployment benchmark. Do not port wholesale before the demo.            |
+| [Open Medical Scribe](https://github.com/BirgerMoell/open-medical-scribe) | MIT        | Pluggable STT and note providers, local/cloud/hybrid modes, FHIR DocumentReference export, audit logging, and multiple note styles. | Reuse ideas for provider boundaries, audit events, and future FHIR export.                      |
+| [scribeHC](https://github.com/trevorpfiz/scribeHC)                        | MIT        | Mobile recording plus dashboard workflow using Expo, Next.js, FastAPI, and SOAP note editing.                                       | Useful UX reference only; OpenMRS O3 already owns this frontend surface.                        |
+| [AI-Scribe](https://github.com/1984Doc/AI-Scribe)                         | GPL-3.0    | Local Whisper and local LLM scribe pattern.                                                                                         | Reference only. Do not copy code into this repo because GPL would change licensing obligations. |
+
+Adopted now:
+
+- Keep the current OpenMRS O3 frontend and LiveKit agent architecture.
+- Keep local-first provider configuration instead of depending on one hosted
+  model.
+- Add helper-side draft lifecycle audit events for `draft_queued`,
+  `draft_saved`, and `draft_write_rejected`.
+- Keep audit events minimal: no transcript text, no draft text, and only hashed
+  patient references.
+- Keep the clinical safety claim narrow: assistive documentation with clinician
+  review, not diagnosis or autonomous charting.
+
+Later product work:
+
+- Add a formal note-quality evaluation rubric, such as PDQI-9-style review, for
+  clinician scoring of generated drafts.
+- Add specialty-specific templates and OpenMRS concept mapping packs.
+- Add local clinical NER with site dictionaries and a labeled Spanish PHI test
+  corpus.
+- Add encrypted storage and immutable audit storage for regulated deployments.
+- Add optional FHIR export where OpenMRS implementations prefer FHIR resources
+  over REST encounter payloads.
+
+## Hackathon Demo
+
+For the OpenMRS AI Hackathon demo, the project shows OpenMRS, LiveKit, and local
+AI services running locally. It generates a synthetic bilingual consultation,
+redacts patient identifiers, and produces a reviewable OpenMRS encounter draft.
+
+The submission focus is the Clinical Track: point-of-care voice support,
+offline-capable AI, translation, and clinician-reviewed documentation assistance.
