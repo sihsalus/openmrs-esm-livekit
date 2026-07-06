@@ -20,6 +20,20 @@ AUDIT_HASH_SALT=<site-managed-random-salt>
 OPENMRS_PASSWORD=<openmrs-admin-password>
 ```
 
+To make the helper capable of writing reviewed draft encounters into the
+OpenMRS base backend, configure the encounter metadata explicitly. The base
+reference application includes these useful defaults:
+
+```bash
+OPENMRS_DRAFT_WRITE_ENABLED=true
+OPENMRS_ENCOUNTER_TYPE_UUID=d7151f82-c1f3-4152-a605-2f9ea7414a79 # Visit Note
+OPENMRS_LOCATION_UUID=44c3efb0-2583-4c80-a79e-1f756a03c0a1 # Outpatient Clinic
+OPENMRS_DRAFT_OBS_CONCEPT_UUID=162169AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA # Text of encounter note
+```
+
+The UI still queues drafts by default unless a reviewed save action requests an
+OpenMRS write. This prevents accidental encounter creation during demos.
+
 The OpenMRS frontend assembly installs the microfrontend from npm. Set
 `OPENMRS_LIVEKIT_FRONTEND_VERSION` to the published package version that
 contains the commit you want to deploy:
