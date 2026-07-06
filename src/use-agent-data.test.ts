@@ -62,6 +62,42 @@ describe('parseAgentDataPayload', () => {
     });
   });
 
+  it('accepts transcript attribution metadata from the agent', () => {
+    expect(
+      parseAgentDataPayload(
+        encode({
+          type: 'transcript',
+          payload: {
+            role: 'patient',
+            language: 'es',
+            text: 'Me duele el pecho.',
+            redacted: 'Me duele el pecho.',
+            speakerId: 'speaker-1',
+            sourceId: 'speaker-1',
+            attributionMode: 'stt-speaker-id',
+            attributionSource: 'dynamic-speaker-map',
+            attributionConfidence: 0.72,
+          },
+        }),
+        () => 12345,
+      ),
+    ).toEqual({
+      type: 'transcript',
+      transcript: {
+        role: 'patient',
+        language: 'es',
+        text: 'Me duele el pecho.',
+        redacted: 'Me duele el pecho.',
+        speakerId: 'speaker-1',
+        sourceId: 'speaker-1',
+        attributionMode: 'stt-speaker-id',
+        attributionSource: 'dynamic-speaker-map',
+        attributionConfidence: 0.72,
+        timestamp: 12345,
+      },
+    });
+  });
+
   it('accepts structured drafts and status messages', () => {
     expect(
       parseAgentDataPayload(

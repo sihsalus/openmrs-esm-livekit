@@ -6,30 +6,16 @@ export type LocaleSource = {
   languages?: readonly string[];
 };
 
-export type BrowserLanguageSource = {
-  language?: string;
-  languages?: readonly string[];
-};
-
 export type ClinicalLanguageDefaults = {
   doctorLanguage: ClinicalLanguageCode;
   patientLanguage: ClinicalLanguageCode;
 };
 
-const currentBrowserLanguageSource = (): BrowserLanguageSource | undefined => {
-  return typeof navigator === 'undefined' ? undefined : navigator;
-};
-
-export const openmrsLocaleFromI18n = (
-  i18n: LocaleSource | undefined,
-  browser: BrowserLanguageSource | undefined = currentBrowserLanguageSource(),
-) => {
+export const openmrsLocaleFromI18n = (i18n: LocaleSource | undefined) => {
   return (
     i18n?.resolvedLanguage ||
     i18n?.languages?.find(Boolean) ||
     i18n?.language ||
-    browser?.languages?.find(Boolean) ||
-    browser?.language ||
     ''
   );
 };
@@ -71,5 +57,4 @@ export const clinicalLanguageDefaultsFromLocale = (
 
 export const clinicalLanguageDefaultsFromOpenmrsLocale = (
   i18n: LocaleSource | undefined,
-  browser?: BrowserLanguageSource,
-) => clinicalLanguageDefaultsFromLocale(openmrsLocaleFromI18n(i18n, browser));
+) => clinicalLanguageDefaultsFromLocale(openmrsLocaleFromI18n(i18n));

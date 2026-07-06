@@ -75,14 +75,16 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434/v1
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
       STT_PROVIDER: whisper
-      STT_LANGUAGE: es
+      STT_LANGUAGE: en
       WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-base}
       WHISPER_COMPUTE_TYPE: int8
       WHISPER_BEAM_SIZE: "3"
       TTS_PROVIDER: piper
-      TTS_LANGUAGE: es
+      TTS_LANGUAGE: en
       PIPER_BINARY: /srv/piper/piper/piper
       PIPER_MODEL_PATH: /srv/piper/voices/es_MX-claude-high.onnx
+      PIPER_MODEL_PATH_ES: /srv/piper/voices/es_MX-claude-high.onnx
+      PIPER_MODEL_PATH_EN: ${PIPER_MODEL_PATH_EN:-}
       TURN_DETECTION_MODE: vad
       FILLER_SOUND_ENABLED: "false"
       ENABLE_OPENMRS_TOOLS: "true"

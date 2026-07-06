@@ -340,6 +340,7 @@ class TokenServerE2ETest(unittest.TestCase):
                 "roomPrefix": "openmrs-room-",
                 "doctorLanguage": "es",
                 "patientLanguage": "en",
+                "agentVoiceLanguage": "en",
             },
         )
         token = payload["token"]
@@ -363,6 +364,10 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(participant_metadata["patientUuid"], "patient-123")
         self.assertEqual(participant_metadata["doctorLanguage"], "es")
         self.assertEqual(participant_metadata["patientLanguage"], "en")
+        self.assertEqual(participant_metadata["agentVoiceLanguage"], "en")
+        self.assertEqual(participant_metadata["captureRole"], "doctor")
+        self.assertEqual(participant_metadata["participantRole"], "doctor")
+        self.assertEqual(participant_metadata["speakerAttributionMode"], "source-role")
         self.assertEqual(signature_part, expected_signature)
         self.assertNotIn("test-secret", token)
         self.assertEqual(payload["roomMetadata"]["status"], "ok")
@@ -377,7 +382,10 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(room_metadata["roomPrefix"], "openmrs-room-")
         self.assertEqual(room_metadata["doctorLanguage"], "es")
         self.assertEqual(room_metadata["patientLanguage"], "en")
+        self.assertEqual(room_metadata["agentVoiceLanguage"], "en")
         self.assertEqual(room_metadata["languageMode"], "bilingual")
+        self.assertEqual(room_metadata["speakerAttributionMode"], "source-role")
+        self.assertEqual(room_metadata["defaultHumanRole"], "doctor")
 
     def test_token_normalizes_unsupported_language_metadata(self):
         FakeLiveKitHandler.room_requests = []
@@ -389,6 +397,8 @@ class TokenServerE2ETest(unittest.TestCase):
                 "roomPrefix": "openmrs-room-",
                 "doctorLanguage": "es-PE",
                 "patientLanguage": "fr",
+                "agentVoiceLanguage": "en-US",
+                "captureRole": "patient",
             },
         )
 
@@ -398,10 +408,39 @@ class TokenServerE2ETest(unittest.TestCase):
         participant_metadata = json.loads(claims["metadata"])
         self.assertEqual(participant_metadata["doctorLanguage"], "es")
         self.assertEqual(participant_metadata["patientLanguage"], "es")
+        self.assertEqual(participant_metadata["agentVoiceLanguage"], "en")
+        self.assertEqual(participant_metadata["captureRole"], "patient")
+        self.assertEqual(participant_metadata["participantRole"], "patient")
+        self.assertEqual(participant_metadata["role"], "patient")
 
         room_metadata = json.loads(FakeLiveKitHandler.room_requests[0]["payload"]["metadata"])
         self.assertEqual(room_metadata["doctorLanguage"], "es")
         self.assertEqual(room_metadata["patientLanguage"], "es")
+        self.assertEqual(room_metadata["agentVoiceLanguage"], "en")
+        self.assertEqual(room_metadata["languageMode"], "single-language")
+
+    def test_token_defaults_to_english_when_openmrs_locale_is_not_provided(self):
+        FakeLiveKitHandler.room_requests = []
+        payload, _response = request_json(
+            self.base_url,
+            "/token",
+            {
+                "patientUuid": "patient-789",
+                "roomPrefix": "openmrs-room-",
+            },
+        )
+
+        _header_part, claims_part, _signature_part = payload["token"].split(".")
+        claims = decode_jwt_json(claims_part)
+        participant_metadata = json.loads(claims["metadata"])
+        self.assertEqual(participant_metadata["doctorLanguage"], "en")
+        self.assertEqual(participant_metadata["patientLanguage"], "en")
+        self.assertEqual(participant_metadata["agentVoiceLanguage"], "en")
+
+        room_metadata = json.loads(FakeLiveKitHandler.room_requests[0]["payload"]["metadata"])
+        self.assertEqual(room_metadata["doctorLanguage"], "en")
+        self.assertEqual(room_metadata["patientLanguage"], "en")
+        self.assertEqual(room_metadata["agentVoiceLanguage"], "en")
         self.assertEqual(room_metadata["languageMode"], "single-language")
 
     def test_compile_encounter_redacts_phi_and_uses_local_ollama_contract(self):

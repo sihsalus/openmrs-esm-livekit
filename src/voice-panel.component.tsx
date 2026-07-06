@@ -37,7 +37,7 @@ import {
   resolveTokenServerPath,
   saveOpenmrsDraft,
 } from './livekit-token';
-import { useAgentData, type AgentClinicalFact } from './use-agent-data';
+import { useAgentData, type AgentClinicalFact, type AgentTranscript } from './use-agent-data';
 import {
   checkingHealth,
   initialHealth,
@@ -190,6 +190,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
     [i18n, localeKey],
   );
   const languageSelectionTouched = useRef(false);
+  const voiceSelectionTouched = useRef(false);
   const livekitServerUrl = useMemo(
     () => resolveLivekitServerUrl(config.livekitServerUrl),
     [config.livekitServerUrl],
@@ -203,6 +204,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   const [connecting, setConnecting] = useState(false);
   const [doctorLanguage, setDoctorLanguage] = useState<LanguageCode>(defaultLanguages.doctorLanguage);
   const [patientLanguage, setPatientLanguage] = useState<LanguageCode>(defaultLanguages.patientLanguage);
+  const [agentVoiceLanguage, setAgentVoiceLanguage] = useState<LanguageCode>(defaultLanguages.doctorLanguage);
 
   useEffect(() => {
     if (languageSelectionTouched.current) {
@@ -211,16 +213,27 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
 
     setDoctorLanguage(defaultLanguages.doctorLanguage);
     setPatientLanguage(defaultLanguages.patientLanguage);
+    if (!voiceSelectionTouched.current) {
+      setAgentVoiceLanguage(defaultLanguages.doctorLanguage);
+    }
   }, [defaultLanguages.doctorLanguage, defaultLanguages.patientLanguage]);
 
   const updateDoctorLanguage = useCallback((language: LanguageCode) => {
     languageSelectionTouched.current = true;
     setDoctorLanguage(language);
+    if (!voiceSelectionTouched.current) {
+      setAgentVoiceLanguage(language);
+    }
   }, []);
 
   const updatePatientLanguage = useCallback((language: LanguageCode) => {
     languageSelectionTouched.current = true;
     setPatientLanguage(language);
+  }, []);
+
+  const updateAgentVoiceLanguage = useCallback((language: LanguageCode) => {
+    voiceSelectionTouched.current = true;
+    setAgentVoiceLanguage(language);
   }, []);
 
   const connect = useCallback(async () => {
@@ -234,6 +247,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
       const result = await fetchLivekitToken(patient.id, tokenEndpoint, roomPrefix, {
         doctorLanguage,
         patientLanguage,
+        agentVoiceLanguage,
       });
       setToken(result.token);
       setRoomName(result.roomName);
@@ -249,7 +263,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
     } finally {
       setConnecting(false);
     }
-  }, [doctorLanguage, patient?.id, patientLanguage, roomPrefix, t, tokenEndpoint]);
+  }, [agentVoiceLanguage, doctorLanguage, patient?.id, patientLanguage, roomPrefix, t, tokenEndpoint]);
 
   const disconnect = useCallback(() => {
     setToken(null);
@@ -307,6 +321,9 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
             <Tag type="cyan" size="sm">
               {t('localAi', 'Local AI')}
             </Tag>
+            <Tag type="cyan" size="sm">
+              {t('sourceAttribution', 'Source attribution')}
+            </Tag>
             <Tag type="blue" size="sm">
               {t('livekitAudio', 'LiveKit audio')}
             </Tag>
@@ -329,7 +346,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
               <p>
                 {t(
                   'agentRoomLanguagesDetail',
-                  'These values are written to LiveKit room metadata before the agent joins. They do not identify speakers automatically.',
+                  'These values are written to LiveKit room metadata before the agent joins. The agent voice is fixed for the room and uses the configured Piper model when available.',
                 )}
               </p>
             </div>
@@ -344,6 +361,11 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
                 value={patientLanguage}
                 onChange={updatePatientLanguage}
               />
+              <LanguageToggle
+                label={t('agentVoiceLanguage', 'Agent voice')}
+                value={agentVoiceLanguage}
+                onChange={updateAgentVoiceLanguage}
+              />
             </div>
           </div>
           <dl className={styles.connectionDetails}>
@@ -355,6 +377,10 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
               <dt>{t('tokenServer', 'Token server')}</dt>
               <dd>{tokenEndpoint}</dd>
               {tokenEndpointDisplay !== tokenEndpoint && <small>{tokenEndpointDisplay}</small>}
+            </div>
+            <div>
+              <dt>{t('speakerAttribution', 'Speaker attribution')}</dt>
+              <dd>{t('sourceRoleWithSttSpeakerId', 'source-role + STT speaker_id')}</dd>
             </div>
             <div>
               <dt>{t('roomPrefix', 'Room prefix')}</dt>
@@ -417,6 +443,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
         tokenEndpoint={tokenEndpoint}
         doctorLanguage={doctorLanguage}
         patientLanguage={patientLanguage}
+        agentVoiceLanguage={agentVoiceLanguage}
       />
     </LiveKitRoom>
   );
@@ -435,6 +462,7 @@ interface ActiveSessionProps {
   tokenEndpoint: string;
   doctorLanguage: LanguageCode;
   patientLanguage: LanguageCode;
+  agentVoiceLanguage: LanguageCode;
 }
 
 const ActiveSession: React.FC<ActiveSessionProps> = ({
@@ -446,6 +474,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   tokenEndpoint,
   doctorLanguage,
   patientLanguage,
+  agentVoiceLanguage,
 }) => {
   const { t } = useTranslation();
   const connectionState = useConnectionState();
@@ -560,7 +589,10 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     return agentTranscripts
       .map(
         (transcript) =>
-          `${transcriptRoleLabel(transcript.role, t)} (${transcript.language.toUpperCase()}): ${
+          `${transcriptRoleLabel(transcript.role, t)} (${transcript.language.toUpperCase()}${transcriptAttributionLabel(
+            transcript,
+            t,
+          )}): ${
             transcript.redacted || transcript.text
           }`,
       )
@@ -709,6 +741,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const stateKind = connectionState === ConnectionState.Connected ? 'green' : 'gray';
   const doctorLanguageLabel = languageLabel(doctorLanguage, t);
   const patientLanguageLabel = languageLabel(patientLanguage, t);
+  const agentVoiceLanguageLabel = languageLabel(agentVoiceLanguage, t);
   const microphoneButtonLabel = microphoneAvailable
     ? muted
       ? t('unmute', 'Unmute')
@@ -874,6 +907,14 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                 language: patientLanguageLabel,
               })}
             </Tag>
+            <Tag type="purple" size="sm">
+              {t('agentVoiceLanguageValue', 'Voice: {{language}}', {
+                language: agentVoiceLanguageLabel,
+              })}
+            </Tag>
+            <Tag type="blue" size="sm">
+              {t('speakerAttributionModeValue', 'Source-role attribution')}
+            </Tag>
             <Tag type="gray" size="sm">
               {t('fixedForRoom', 'Fixed for room')}
             </Tag>
@@ -881,7 +922,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           <p>
             {t(
               'roomLanguageMetadataDetail',
-              'The agent received these values before joining. Speaker role detection still depends on the capture flow.',
+              'The agent received these values before joining. Speaker attribution uses STT speaker IDs when available and falls back to the configured default role.',
             )}
           </p>
         </div>
@@ -1279,6 +1320,18 @@ function transcriptRoleLabel(
     return t('patient', 'Patient');
   }
   return t('assistant', 'Assistant');
+}
+
+function transcriptAttributionLabel(
+  transcript: AgentTranscript,
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  const speakerId = transcript.speakerId || transcript.sourceId;
+  if (!speakerId) {
+    return '';
+  }
+
+  return `, ${t('speakerIdValue', 'speaker {{speakerId}}', { speakerId })}`;
 }
 
 function splitListInput(value: string): string[] {

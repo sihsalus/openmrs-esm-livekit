@@ -62,6 +62,7 @@ describe('LiveKit token endpoint transport', () => {
       fetchLivekitToken('patient-123', 'https://openmrs.example/livekit/token', 'openmrs-voice-', {
         doctorLanguage: 'es',
         patientLanguage: 'en',
+        agentVoiceLanguage: 'es',
       }),
     ).resolves.toEqual({ token: 'signed-token', roomName: 'openmrs-voice-patient-123' });
 
@@ -73,6 +74,10 @@ describe('LiveKit token endpoint transport', () => {
       roomPrefix: 'openmrs-voice-',
       doctorLanguage: 'es',
       patientLanguage: 'en',
+      agentVoiceLanguage: 'es',
+      captureRole: 'doctor',
+      defaultHumanRole: 'doctor',
+      speakerAttributionMode: 'source-role',
     });
   });
 });

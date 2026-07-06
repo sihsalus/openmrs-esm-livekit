@@ -41,7 +41,7 @@
 .connectionDetails {
   display: grid;
   gap: layout.$spacing-05;
-  grid-template-columns: minmax(18rem, 2fr) minmax(14rem, 1.25fr) minmax(8rem, 0.75fr);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   margin: 0;
 
   div {

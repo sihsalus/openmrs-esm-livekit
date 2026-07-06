@@ -124,11 +124,18 @@ The OpenMRS module config schema exposes:
 - `tokenEndpoint`: helper endpoint used to request LiveKit room tokens.
 - `roomPrefix`: LiveKit room prefix joined by the local agent.
 
-At consultation start, the microfrontend derives default clinician and patient
-languages from the active OpenMRS locale, lets the user adjust them, and sends
-`doctorLanguage` / `patientLanguage` to the helper before the LiveKit room is
-created. The helper writes those values into room metadata for the agent. This
-is room configuration, not automatic speaker role detection.
+At consultation start, the microfrontend derives default clinician, patient, and
+agent voice languages from the active OpenMRS locale. English is the default
+unless the OpenMRS locale is Spanish (`es`, `es-PE`, `es_MX`, etc.). The user
+can adjust the values before the room is created. The helper sends
+`doctorLanguage`, `patientLanguage`, and `agentVoiceLanguage` in room metadata
+and declares `speakerAttributionMode=source-role`.
+
+The current browser microphone is requested as `captureRole=doctor`. If the STT
+provider emits a `speaker_id`, the agent includes that speaker id and attribution
+source in transcript payloads. If no `speaker_id` is available, the transcript
+falls back to the configured default human role instead of pretending that
+doctor/patient diarization happened.
 
 The helper supports optional OpenMRS draft write configuration. See [token-server/README.md](token-server/README.md) for endpoint contracts, OpenMRS write safeguards, and environment variables.
 
