@@ -313,8 +313,8 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
         {!onPreflightActionsChange && (
           <ButtonSet className={styles.preflightActions}>
             {onClose && (
-              <Button kind="danger--ghost" onClick={onClose}>
-                {t('close', 'Close')}
+              <Button kind="secondary" onClick={onClose}>
+                {t('cancel', 'Cancel')}
               </Button>
             )}
             <Button
