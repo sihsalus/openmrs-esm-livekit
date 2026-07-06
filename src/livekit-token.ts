@@ -6,6 +6,8 @@ export interface LivekitRoomLanguageConfig {
   agentVoiceLanguage: ClinicalLanguageCode;
 }
 
+type JsonRecord = Record<string, unknown>;
+
 export async function fetchLivekitToken(
   patientUuid: string,
   tokenEndpoint: string,
@@ -28,15 +30,21 @@ export async function fetchLivekitToken(
     }),
   });
   if (!res.ok) {
-    throw new Error(`Token request failed: ${res.status}`);
+    throw new Error(await buildResponseErrorMessage(res, 'Token request failed'));
   }
 
-  const payload = await res.json();
+  const payload = await readJsonResponse<{ token?: string; roomName?: string }>(
+    res,
+    'Token response was not valid JSON',
+  );
   if (!payload?.token || !payload?.roomName) {
     throw new Error('Token response did not include a token and room name');
   }
 
-  return payload;
+  return {
+    token: payload.token,
+    roomName: payload.roomName,
+  };
 }
 
 export interface OpenmrsDraftPayload {
@@ -77,13 +85,12 @@ export async function saveOpenmrsDraft(
     credentials: 'include',
     body: JSON.stringify(payload),
   });
-  const body = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(body?.error || body?.message || `Draft save failed: ${res.status}`);
+    throw new Error(await buildResponseErrorMessage(res, 'Draft save failed'));
   }
 
-  return body;
+  return readJsonResponse<OpenmrsDraftResult>(res, 'Draft save response was not valid JSON');
 }
 
 export function buildRoomName(patientUuid: string, roomPrefix: string): string {
@@ -149,4 +156,70 @@ function isLocalHostname(hostname: string): boolean {
     hostname === '[::1]' ||
     hostname.endsWith('.localhost')
   );
+}
+
+async function readJsonResponse<T = JsonRecord>(res: Response, fallbackMessage: string): Promise<T> {
+  try {
+    const payload = await res.json();
+    return (isRecord(payload) ? payload : {}) as T;
+  } catch {
+    throw new Error(fallbackMessage);
+  }
+}
+
+async function buildResponseErrorMessage(res: Response, fallbackLabel: string): Promise<string> {
+  const responseDetail = await readResponseDetail(res);
+  const statusText = [res.status, res.statusText].filter(Boolean).join(' ');
+  const prefix = statusText ? `${fallbackLabel}: ${statusText}` : fallbackLabel;
+  return responseDetail ? `${prefix} - ${responseDetail}` : prefix;
+}
+
+async function readResponseDetail(res: Response): Promise<string> {
+  const text = await res.text().catch(() => '');
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const parsed = parseJsonObject(trimmed);
+  if (parsed) {
+    return compactMessage(
+      [
+        stringField(parsed, 'code'),
+        stringField(parsed, 'error'),
+        stringField(parsed, 'message'),
+        stringField(parsed, 'detail'),
+      ]
+        .filter(Boolean)
+        .join(': '),
+    );
+  }
+
+  if (trimmed.startsWith('<')) {
+    return 'non-JSON response from token server';
+  }
+
+  return compactMessage(trimmed);
+}
+
+function parseJsonObject(value: string): JsonRecord | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function stringField(payload: JsonRecord, key: string): string {
+  const value = payload[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function compactMessage(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
