@@ -17,7 +17,7 @@ from typing import Any
 
 BASE_URL = os.environ.get("TOKEN_SERVER_SMOKE_URL", "http://127.0.0.1:7890").rstrip("/")
 PATIENT_UUID = os.environ.get("TOKEN_SERVER_SMOKE_PATIENT_UUID", "synthetic-smoke-patient")
-ROOM_PREFIX = os.environ.get("TOKEN_SERVER_SMOKE_ROOM_PREFIX", "iot-device-")
+ROOM_PREFIX = os.environ.get("TOKEN_SERVER_SMOKE_ROOM_PREFIX", "openmrs-voice-")
 
 
 def request_json(path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:

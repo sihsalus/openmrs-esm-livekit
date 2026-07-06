@@ -1,15 +1,53 @@
 @use '@carbon/layout';
 
-.context {
-  border-top: 1px solid var(--cds-border-subtle-01);
-  padding-top: layout.$spacing-04;
+.contextCard {
+  display: grid;
+  gap: layout.$spacing-04;
   width: 100%;
+}
+
+.contextHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: layout.$spacing-04;
 }
 
 .contextTitle {
   font-size: 0.875rem;
   font-weight: 600;
-  margin: 0 0 layout.$spacing-03;
+  margin: 0;
+}
+
+.patientName {
+  color: var(--cds-text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: layout.$spacing-02 0 0;
+}
+
+.demographicsList {
+  display: grid;
+  gap: layout.$spacing-03;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  margin: 0;
+
+  div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  dt {
+    color: var(--cds-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  dd {
+    font-size: 0.875rem;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
 }
 
 .emptyState {
@@ -40,4 +78,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: layout.$spacing-02;
+
+  :global(.cds--tag) {
+    max-width: 100%;
+  }
+
+  :global(.cds--tag__label) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }

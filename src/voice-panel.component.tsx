@@ -8,13 +8,13 @@ import {
 import { ConnectionState } from 'livekit-client';
 import {
   Button,
-  InlineLoading,
   Tag,
   Tile,
   TextArea,
   TextInput,
   Accordion,
   AccordionItem,
+  ButtonSet,
 } from '@carbon/react';
 import {
   Microphone,
@@ -163,6 +163,14 @@ const initialStepStatus: Record<FlowStep, StepStatus> = {
   openmrsDraft: 'idle',
 };
 
+function formatEndpointForDisplay(endpoint: string): string {
+  try {
+    return new URL(endpoint, window.location.href).toString();
+  } catch {
+    return endpoint;
+  }
+}
+
 const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
   const { t } = useTranslation();
   const config = useConfig<Config>();
@@ -172,7 +180,8 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
     [config.livekitServerUrl],
   );
   const tokenEndpoint = useMemo(() => resolveTokenEndpoint(config.tokenEndpoint), [config.tokenEndpoint]);
-  const roomPrefix = config.roomPrefix || 'iot-device-';
+  const tokenEndpointDisplay = useMemo(() => formatEndpointForDisplay(tokenEndpoint), [tokenEndpoint]);
+  const roomPrefix = config.roomPrefix || 'openmrs-voice-';
   const [token, setToken] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -214,69 +223,81 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose }) => {
     setRoomName('');
   }, []);
 
-  if (patientLoading) {
-    return (
-      <Tile className={styles.panel}>
-        <InlineLoading description={t('loadingPatient', 'Loading patient...')} />
-      </Tile>
-    );
-  }
-
   if (!token) {
+    const startConsultationLabel = patientLoading
+      ? t('loadingPatient', 'Loading patient...')
+      : connecting
+        ? t('connecting', 'Connecting...')
+        : t('startConsultation', 'Start consultation');
+
     return (
-      <Tile className={styles.panel}>
+      <div className={`${styles.panel} ${styles.preflightPanel}`}>
         <div className={styles.heroHeader}>
           <div>
             <h4 className={styles.title}>{t('voiceConsultation', 'Voice consultation')}</h4>
-            <p className={styles.patientName}>{patient?.name?.[0]?.text ?? ''}</p>
           </div>
-          <Tag type="cyan" size="sm">
-            {t('localAi', 'Local AI')}
-          </Tag>
         </div>
-        <p className={styles.description}>
-          {t(
-            'translationFlowDescription',
-            'Open a local LiveKit room, then run the doctor-patient translation and OpenMRS draft flow from this workspace.',
-          )}
-        </p>
-        <div className={styles.pipelinePreview}>
-          <Tag type="blue" size="sm">
-            {t('livekitAudio', 'LiveKit audio')}
-          </Tag>
-          <Tag type="purple" size="sm">
-            {t('localStt', 'Local STT')}
-          </Tag>
-          <Tag type="cyan" size="sm">
-            {t('clinicalTranslation', 'Clinical translation')}
-          </Tag>
-          <Tag type="green" size="sm">
-            {t('localTts', 'Local TTS')}
-          </Tag>
-          <Tag type="gray" size="sm">
-            {t('openmrsDraft', 'OpenMRS draft')}
-          </Tag>
-        </div>
-        <dl className={styles.connectionDetails}>
-          <div>
-            <dt>{t('livekitServer', 'LiveKit')}</dt>
-            <dd>{livekitServerUrl}</dd>
+
+        <Tile className={styles.preflightCard}>
+          <div className={styles.cardHeader}>
+            <h5>{t('configurations', 'Configurations')}</h5>
+            <Tag type="cyan" size="sm">
+              {t('localAi', 'Local AI')}
+            </Tag>
           </div>
-          <div>
-            <dt>{t('tokenServer', 'Token server')}</dt>
-            <dd>{tokenEndpoint}</dd>
+          <p className={styles.description}>
+            {t(
+              'translationFlowDescription',
+              'Open a local LiveKit room, then run the doctor-patient translation and OpenMRS draft flow from this workspace.',
+            )}
+          </p>
+          <div className={styles.pipelinePreview}>
+            <Tag type="blue" size="sm">
+              {t('livekitAudio', 'LiveKit audio')}
+            </Tag>
+            <Tag type="purple" size="sm">
+              {t('localStt', 'Local STT')}
+            </Tag>
+            <Tag type="cyan" size="sm">
+              {t('clinicalTranslation', 'Clinical translation')}
+            </Tag>
+            <Tag type="green" size="sm">
+              {t('localTts', 'Local TTS')}
+            </Tag>
+            <Tag type="gray" size="sm">
+              {t('openmrsDraft', 'OpenMRS draft')}
+            </Tag>
           </div>
-          <div>
-            <dt>{t('roomPrefix', 'Room prefix')}</dt>
-            <dd>{roomPrefix}</dd>
-          </div>
-        </dl>
+          <dl className={styles.connectionDetails}>
+            <div>
+              <dt>{t('livekitServer', 'LiveKit')}</dt>
+              <dd>{livekitServerUrl}</dd>
+            </div>
+            <div>
+              <dt>{t('tokenServer', 'Token server')}</dt>
+              <dd>{tokenEndpoint}</dd>
+              {tokenEndpointDisplay !== tokenEndpoint && <small>{tokenEndpointDisplay}</small>}
+            </div>
+            <div>
+              <dt>{t('roomPrefix', 'Room prefix')}</dt>
+              <dd>{roomPrefix}</dd>
+            </div>
+          </dl>
+        </Tile>
+
         <PatientContext />
         {error && <p className={styles.error}>{error}</p>}
-        <Button kind="primary" renderIcon={Microphone} onClick={connect} disabled={connecting}>
-          {connecting ? t('connecting', 'Connecting...') : t('startConsultation', 'Start consultation')}
-        </Button>
-      </Tile>
+        <ButtonSet className={styles.preflightActions}>
+          {onClose && (
+            <Button kind="secondary" onClick={onClose}>
+              {t('close', 'Close')}
+            </Button>
+          )}
+          <Button kind="primary" renderIcon={Microphone} onClick={connect} disabled={patientLoading || connecting}>
+            {startConsultationLabel}
+          </Button>
+        </ButtonSet>
+      </div>
     );
   }
 

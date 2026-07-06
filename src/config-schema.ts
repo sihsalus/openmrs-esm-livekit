@@ -15,7 +15,7 @@ export const configSchema = {
   },
   roomPrefix: {
     _type: Type.String,
-    _default: 'iot-device-',
+    _default: 'openmrs-voice-',
     _description: 'LiveKit room prefix. The local OpenMRS LiveKit agent currently joins only rooms with this prefix.',
   },
 };

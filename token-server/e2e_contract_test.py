@@ -403,13 +403,13 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["openmrsDraftRequest"]["patientUuid"], "synthetic-patient")
 
     def test_recording_requires_consent_and_creates_manifest_only(self):
-        denied, _response = request_json(self.base_url, "/recording/session", {"roomName": "iot-device-demo"})
+        denied, _response = request_json(self.base_url, "/recording/session", {"roomName": "openmrs-voice-demo"})
         self.assertEqual(denied["status"], "consent_required")
 
         allowed, _response = request_json(
             self.base_url,
             "/recording/session",
-            {"roomName": "iot-device-demo", "patientUuid": "synthetic-patient", "consentCaptured": True},
+            {"roomName": "openmrs-voice-demo", "patientUuid": "synthetic-patient", "consentCaptured": True},
         )
         self.assertEqual(allowed["recordingStatus"], "manifest_recorded")
         self.assertFalse(allowed["rawAudioStored"])

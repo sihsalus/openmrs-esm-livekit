@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveLivekitServerUrl, resolveTokenEndpoint, resolveTokenServerPath } from './livekit-token';
+import {
+  buildRoomName,
+  resolveLivekitServerUrl,
+  resolveTokenEndpoint,
+  resolveTokenServerPath,
+} from './livekit-token';
 
 describe('LiveKit token endpoint transport', () => {
   afterEach(() => {
@@ -38,6 +43,10 @@ describe('LiveKit token endpoint transport', () => {
     expect(resolveTokenServerPath('https://openmrs.example:7890/token', '/health')).toBe(
       'https://openmrs.example:7890/health',
     );
+  });
+
+  it('uses a clinical OpenMRS room prefix when none is configured', () => {
+    expect(buildRoomName('patient/uuid', '')).toBe('openmrs-voice-patient-uuid');
   });
 });
 
