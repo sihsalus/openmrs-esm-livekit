@@ -4,6 +4,12 @@
   min-width: min(48rem, 100%);
 }
 
+.modalFooter {
+  :global(.cds--btn) {
+    max-width: none;
+  }
+}
+
 .panel {
   padding: layout.$spacing-05;
   display: flex;
@@ -23,7 +29,8 @@
 
 .connectionDetails {
   display: grid;
-  gap: layout.$spacing-03;
+  gap: layout.$spacing-05;
+  grid-template-columns: minmax(18rem, 2fr) minmax(14rem, 1.25fr) minmax(8rem, 0.75fr);
   margin: 0;
 
   div {
@@ -58,15 +65,6 @@
   margin: 0 0 layout.$spacing-03;
 }
 
-/* ---- Hero header (pre-connect) ---- */
-
-.heroHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: layout.$spacing-04;
-}
-
 .preflightCard {
   display: grid;
   gap: layout.$spacing-04;
@@ -97,6 +95,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: layout.$spacing-03;
+
+  :global(.cds--tag) {
+    margin: 0;
+  }
 }
 
 .preflightActions {
@@ -105,6 +107,12 @@
 
   button {
     max-width: 12rem;
+  }
+}
+
+@media (max-width: 60rem) {
+  .connectionDetails {
+    grid-template-columns: 1fr;
   }
 }
 

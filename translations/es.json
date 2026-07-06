@@ -113,7 +113,6 @@
   "liveTranscript": "Transcripción en vivo",
   "patientContext": "Contexto del paciente",
   "clinicalContext": "Contexto clínico",
-  "openmrsPatient": "Paciente OpenMRS",
   "unknownPatient": "Paciente sin nombre",
   "sex": "Sexo",
   "age": "Edad",
