@@ -12,7 +12,7 @@ LIVEKIT_CONFIG = Path(
     os.environ.get("LIVEKIT_CONFIG", ROOT / "deploy" / "livekit" / "livekit.yaml")
 ).resolve()
 LIVEKIT_DOCKER_CONFIG = ROOT / "deploy" / "livekit" / "livekit-docker.yaml"
-FRONTEND_MODULE_VERSION = os.environ.get("OPENMRS_LIVEKIT_FRONTEND_VERSION", "0.1.27")
+FRONTEND_MODULE_VERSION = os.environ.get("OPENMRS_LIVEKIT_FRONTEND_VERSION", "0.1.28")
 FRONTEND_LIVEKIT_SERVER_URL = os.environ.get("OPENMRS_LIVEKIT_SERVER_URL", "").strip()
 LIVEKIT_HOST = os.environ.get("LIVEKIT_HOST", "localhost")
 TOKEN_SERVER_ALLOWED_ORIGINS = os.environ.get("TOKEN_SERVER_ALLOWED_ORIGINS", "").strip()

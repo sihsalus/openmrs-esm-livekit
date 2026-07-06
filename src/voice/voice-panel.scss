@@ -38,98 +38,21 @@
   font-weight: 600;
 }
 
-.connectionDetails {
-  display: grid;
-  gap: layout.$spacing-05;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  margin: 0;
-
-  div {
-    display: grid;
-    gap: layout.$spacing-01;
-  }
-
-  dt {
-    color: var(--cds-text-secondary);
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-  dd {
-    font-family: monospace;
-    font-size: 0.75rem;
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-
-  small {
-    color: var(--cds-text-helper);
-    font-family: monospace;
-    font-size: 0.75rem;
-    overflow-wrap: anywhere;
-  }
-}
-
 .error {
   color: var(--cds-support-error);
   font-size: 0.875rem;
   margin: 0 0 layout.$spacing-03;
 }
 
-.preflightCard {
+.languageCard {
   display: grid;
   gap: layout.$spacing-04;
   width: 100%;
-}
-
-.cardHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: layout.$spacing-04;
 
   h5 {
     font-size: 0.875rem;
     font-weight: 600;
     margin: 0;
-  }
-}
-
-.description {
-  color: var(--cds-text-secondary);
-  font-size: 0.875rem;
-  line-height: 1.45;
-  margin: 0;
-}
-
-.pipelinePreview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: layout.$spacing-03;
-
-  :global(.cds--tag) {
-    margin: 0;
-  }
-}
-
-.roomLanguageConfig {
-  display: grid;
-  gap: layout.$spacing-04;
-  padding: layout.$spacing-04;
-  background: var(--cds-layer-02);
-  border-left: 3px solid var(--cds-border-interactive);
-
-  h6 {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    margin: 0;
-  }
-
-  p {
-    color: var(--cds-text-secondary);
-    font-size: 0.8125rem;
-    line-height: 1.4;
-    margin: layout.$spacing-02 0 0;
   }
 }
 
@@ -139,12 +62,6 @@
 
   button {
     max-width: 12rem;
-  }
-}
-
-@media (max-width: 60rem) {
-  .connectionDetails {
-    grid-template-columns: 1fr;
   }
 }
 

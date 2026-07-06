@@ -12,6 +12,14 @@
       "order": 50,
       "online": true,
       "offline": false
+    },
+    {
+      "name": "system-administration-livekit-configuration-card-link",
+      "component": "livekitAdminCardLink",
+      "slot": "system-admin-page-card-link-slot",
+      "order": 80,
+      "online": true,
+      "offline": false
     }
   ],
   "modals": [
@@ -23,5 +31,12 @@
       }
     }
   ],
-  "pages": []
+  "pages": [
+    {
+      "component": "livekitConfigurationPage",
+      "route": "livekit-configuration",
+      "online": true,
+      "offline": false
+    }
+  ]
 }

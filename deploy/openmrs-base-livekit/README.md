@@ -25,7 +25,7 @@ The OpenMRS frontend assembly installs the microfrontend from npm. Set
 contains the commit you want to deploy:
 
 ```bash
-OPENMRS_LIVEKIT_FRONTEND_VERSION=0.1.27
+OPENMRS_LIVEKIT_FRONTEND_VERSION=0.1.28
 ```
 
 Verify the package before rebuilding the OpenMRS frontend:
@@ -51,15 +51,15 @@ unrelated `@openmrs/*` registry timeouts, deploy the published npm tarball as th
 temporary importmap hotfix instead of using a local build:
 
 ```bash
-npm pack @sihsalus/esm-livekit-app@0.1.27
-tar -xzf sihsalus-esm-livekit-app-0.1.27.tgz
+npm pack @sihsalus/esm-livekit-app@0.1.28
+tar -xzf sihsalus-esm-livekit-app-0.1.28.tgz
 ```
 
 Copy `package/dist/*` into the frontend nginx document root under
-`sihsalus-esm-livekit-app-0.1.27/`, then point `importmap.json` at:
+`sihsalus-esm-livekit-app-0.1.28/`, then point `importmap.json` at:
 
 ```text
-./sihsalus-esm-livekit-app-0.1.27/openmrs-esm-livekit-app.js
+./sihsalus-esm-livekit-app-0.1.28/openmrs-esm-livekit-app.js
 ```
 
 Keep `frontend/spa-assemble-config.json` on the same published version so the
