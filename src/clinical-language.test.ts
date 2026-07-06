@@ -35,33 +35,33 @@ describe('clinical language defaults', () => {
     });
   });
 
-  it('resolves locale from OpenMRS i18n before browser fallback', () => {
+  it('resolves locale from OpenMRS i18n only', () => {
     expect(
-      openmrsLocaleFromI18n(
-        {
-          resolvedLanguage: 'es-PE',
-          language: 'en',
-          languages: ['en'],
-        },
-        { language: 'en-US' },
-      ),
+      openmrsLocaleFromI18n({
+        resolvedLanguage: 'es-PE',
+        language: 'en',
+        languages: ['en'],
+      }),
     ).toBe('es-PE');
 
     expect(
-      openmrsLocaleFromI18n(
-        {
-          language: 'en',
-          languages: ['es-MX', 'en'],
-        },
-        { language: 'en-US' },
-      ),
+      openmrsLocaleFromI18n({
+        language: 'en',
+        languages: ['es-MX', 'en'],
+      }),
     ).toBe('es-MX');
+
+    expect(openmrsLocaleFromI18n(undefined)).toBe('');
   });
 
   it('derives clinical defaults from OpenMRS i18n', () => {
     expect(clinicalLanguageDefaultsFromOpenmrsLocale({ resolvedLanguage: 'es' })).toEqual({
       doctorLanguage: 'es',
       patientLanguage: 'es',
+    });
+    expect(clinicalLanguageDefaultsFromOpenmrsLocale(undefined)).toEqual({
+      doctorLanguage: 'en',
+      patientLanguage: 'en',
     });
   });
 });

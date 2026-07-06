@@ -137,17 +137,38 @@ The metadata payload intentionally stays minimal:
   "roomPrefix": "openmrs-voice-",
   "doctorLanguage": "es",
   "patientLanguage": "en",
+  "agentVoiceLanguage": "es",
   "languageMode": "bilingual",
+  "speakerAttributionMode": "source-role",
+  "defaultHumanRole": "doctor",
   "source": "openmrs-livekit-token-server"
 }
 ```
 
-`doctorLanguage` and `patientLanguage` are normalized to the supported base
-codes `en` and `es`. Locale-shaped values such as `es-PE` are accepted and
-stored as `es`; unsupported patient languages fall back to the normalized
-clinician language. These fields configure the room and initial agent behavior;
-they are not speaker diarization and do not identify who is talking from a
-shared microphone.
+`doctorLanguage`, `patientLanguage`, and `agentVoiceLanguage` are normalized to
+the supported base codes `en` and `es`. Locale-shaped values such as `es-PE` are
+accepted and stored as `es`; unsupported patient languages fall back to the
+normalized clinician language. `agentVoiceLanguage` falls back to the clinician
+language. If the frontend does not send language metadata, the helper defaults
+to English.
+
+The helper also signs participant metadata with:
+
+```json
+{
+  "role": "clinician",
+  "captureRole": "doctor",
+  "participantRole": "doctor",
+  "defaultHumanRole": "doctor",
+  "speakerAttributionMode": "source-role"
+}
+```
+
+The current OpenMRS browser client uses `captureRole=doctor`. Real role
+attribution requires an STT `speaker_id`, a configured `speakerRoleMap`, or a
+separate capture flow that supplies patient-role metadata. Without that source,
+the agent publishes transcript payloads with a default-role attribution marker
+instead of claiming automatic diarization.
 
 If the LiveKit room already exists, the helper updates room metadata instead of
 failing the token request. If metadata sync fails, `/token` still returns the
@@ -159,7 +180,9 @@ continue while logs expose the missing metadata path.
   "patientUuid": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
   "roomPrefix": "openmrs-voice-",
   "doctorLanguage": "es",
-  "patientLanguage": "en"
+  "patientLanguage": "en",
+  "agentVoiceLanguage": "es",
+  "captureRole": "doctor"
 }
 ```
 

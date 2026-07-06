@@ -38,7 +38,9 @@ DEFAULT_DEV_API_SECRET = "secret"
 PRODUCTION_ENVIRONMENTS = {"production", "prod", "staging", "shared"}
 LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "::1", "[::1]"}
 SUPPORTED_CLINICAL_LANGUAGES = {"en", "es"}
-DEFAULT_CLINICAL_LANGUAGE = "es"
+DEFAULT_CLINICAL_LANGUAGE = "en"
+SUPPORTED_CAPTURE_ROLES = {"doctor", "patient"}
+DEFAULT_CAPTURE_ROLE = "doctor"
 
 
 def env_flag(name: str) -> bool:
@@ -191,23 +193,42 @@ class TokenHandler(BaseHTTPRequestHandler):
             body.get("doctorLanguage"), DEFAULT_CLINICAL_LANGUAGE
         )
         patient_language = sanitize_language_code(body.get("patientLanguage"), doctor_language)
-        identity = f"clinician-{int(time.time())}"
+        agent_voice_language = sanitize_language_code(
+            body.get("agentVoiceLanguage"), doctor_language
+        )
+        capture_role = sanitize_capture_role(
+            body.get("captureRole") or body.get("participantRole"),
+            DEFAULT_CAPTURE_ROLE,
+        )
+        default_human_role = sanitize_capture_role(
+            body.get("defaultHumanRole"),
+            capture_role,
+        )
+        identity_prefix = "clinician" if capture_role == "doctor" else "patient"
+        identity = f"{identity_prefix}-{int(time.time())}"
 
         room_metadata = build_room_metadata(
             patient_uuid,
             room_prefix,
             doctor_language,
             patient_language,
+            agent_voice_language,
+            default_human_role,
         )
         metadata_result = sync_livekit_room_metadata(room_name, room_metadata)
         token = create_token(
             room_name,
             identity,
             {
-                "role": "clinician",
+                "role": "clinician" if capture_role == "doctor" else "patient",
+                "captureRole": capture_role,
+                "participantRole": capture_role,
+                "defaultHumanRole": default_human_role,
+                "speakerAttributionMode": "source-role",
                 "patientUuid": patient_uuid,
                 "doctorLanguage": doctor_language,
                 "patientLanguage": patient_language,
+                "agentVoiceLanguage": agent_voice_language,
             },
         )
         self._send_json(
@@ -274,20 +295,36 @@ def sanitize_language_code(value: object, fallback: str = DEFAULT_CLINICAL_LANGU
     return fallback if fallback in SUPPORTED_CLINICAL_LANGUAGES else DEFAULT_CLINICAL_LANGUAGE
 
 
+def sanitize_capture_role(value: object, fallback: str = DEFAULT_CAPTURE_ROLE) -> str:
+    normalized = str(value or "").strip().lower().replace("_", "-")
+    if normalized in {"clinician", "provider"}:
+        normalized = "doctor"
+    if normalized in SUPPORTED_CAPTURE_ROLES:
+        return normalized
+    return fallback if fallback in SUPPORTED_CAPTURE_ROLES else DEFAULT_CAPTURE_ROLE
+
+
 def build_room_metadata(
     patient_uuid: str,
     room_prefix: str,
     doctor_language: str = DEFAULT_CLINICAL_LANGUAGE,
     patient_language: str = DEFAULT_CLINICAL_LANGUAGE,
+    agent_voice_language: str | None = None,
+    default_human_role: str = DEFAULT_CAPTURE_ROLE,
 ) -> dict:
     doctor_language = sanitize_language_code(doctor_language, DEFAULT_CLINICAL_LANGUAGE)
     patient_language = sanitize_language_code(patient_language, doctor_language)
+    agent_voice_language = sanitize_language_code(agent_voice_language, doctor_language)
+    default_human_role = sanitize_capture_role(default_human_role, DEFAULT_CAPTURE_ROLE)
     return {
         "patientUuid": patient_uuid,
         "roomPrefix": room_prefix,
         "doctorLanguage": doctor_language,
         "patientLanguage": patient_language,
+        "agentVoiceLanguage": agent_voice_language,
         "languageMode": "bilingual" if doctor_language != patient_language else "single-language",
+        "speakerAttributionMode": "source-role",
+        "defaultHumanRole": default_human_role,
         "source": "openmrs-livekit-token-server",
     }
 
@@ -414,7 +451,7 @@ def livekit_room_metadata_status() -> dict:
     return {
         "status": "configured" if LIVEKIT_HTTP_URL else "disabled",
         "livekitHttpUrlConfigured": bool(LIVEKIT_HTTP_URL),
-        "contract": "Best-effort LiveKit room metadata with patientUuid, roomPrefix, doctorLanguage, and patientLanguage",
+        "contract": "Best-effort LiveKit room metadata with patientUuid, roomPrefix, languages, agent voice, and source-role attribution",
     }
 
 

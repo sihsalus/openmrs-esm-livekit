@@ -145,16 +145,24 @@ Expected result:
   from the OpenMRS microfrontend when `LIVEKIT_HTTP_URL` is configured.
 - Agent logs `Metadata parsed` when LiveKit room metadata is available.
 - The helper room metadata includes normalized `doctorLanguage`,
-  `patientLanguage`, and `languageMode`. The agent uses `doctorLanguage` for
-  the initial greeting and data-channel transcript language labels.
+  `patientLanguage`, `agentVoiceLanguage`, `languageMode`,
+  `speakerAttributionMode`, and `defaultHumanRole`.
+- English is the expected default when OpenMRS does not expose a Spanish locale.
+  Spanish OpenMRS locales such as `es`, `es-PE`, or `es_MX` should produce
+  Spanish room metadata.
+- The agent uses `doctorLanguage` for STT language hints, `agentVoiceLanguage`
+  for the initial greeting and assistant transcript language labels, and
+  `patientLanguage` for patient-facing translation context.
 - Agent may log `Room metadata derived from room name` as a non-blocking
   fallback for rooms named with the configured prefix, for example
   `openmrs-voice-<patientUuid>`.
 - `Room metadata empty` should only appear for rooms that do not match the
   configured agent room prefix or cannot expose a patient UUID safely.
-- These language fields are room configuration, not automatic speaker
-  diarization. A shared microphone still cannot reliably distinguish clinician
-  and patient roles without an explicit capture flow or separate participants.
+- Transcript payloads should include `speakerId` and
+  `attributionMode=stt-speaker-id` when the STT provider emits speaker IDs. If
+  no speaker ID is available, the payload should include
+  `attributionSource=missing-speaker-id` and fall back to `defaultHumanRole`.
+  That fallback is intentionally not presented as automatic diarization.
 
 OpenMRS base FHIR MedicationRequest validation:
 

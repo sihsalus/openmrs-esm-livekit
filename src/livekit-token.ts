@@ -3,6 +3,7 @@ import type { ClinicalLanguageCode } from './clinical-language';
 export interface LivekitRoomLanguageConfig {
   doctorLanguage: ClinicalLanguageCode;
   patientLanguage: ClinicalLanguageCode;
+  agentVoiceLanguage: ClinicalLanguageCode;
 }
 
 export async function fetchLivekitToken(
@@ -16,7 +17,15 @@ export async function fetchLivekitToken(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ patientUuid, roomName, roomPrefix, ...languageConfig }),
+    body: JSON.stringify({
+      patientUuid,
+      roomName,
+      roomPrefix,
+      ...languageConfig,
+      captureRole: 'doctor',
+      defaultHumanRole: 'doctor',
+      speakerAttributionMode: 'source-role',
+    }),
   });
   if (!res.ok) {
     throw new Error(`Token request failed: ${res.status}`);

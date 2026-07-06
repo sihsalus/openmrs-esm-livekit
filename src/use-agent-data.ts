@@ -7,6 +7,11 @@ export interface AgentTranscript {
   language: string;
   text: string;
   redacted?: string;
+  speakerId?: string;
+  sourceId?: string;
+  attributionMode?: string;
+  attributionSource?: string;
+  attributionConfidence?: number;
   timestamp: number;
 }
 
@@ -170,7 +175,14 @@ function isAgentTranscriptPayload(payload: unknown): payload is AgentTranscriptP
     (payload.role === 'doctor' || payload.role === 'patient' || payload.role === 'assistant') &&
     typeof payload.language === 'string' &&
     typeof payload.text === 'string' &&
-    (payload.redacted === undefined || typeof payload.redacted === 'string')
+    (payload.redacted === undefined || typeof payload.redacted === 'string') &&
+    (payload.speakerId === undefined || typeof payload.speakerId === 'string') &&
+    (payload.sourceId === undefined || typeof payload.sourceId === 'string') &&
+    (payload.attributionMode === undefined || typeof payload.attributionMode === 'string') &&
+    (payload.attributionSource === undefined || typeof payload.attributionSource === 'string') &&
+    (payload.attributionConfidence === undefined ||
+      (typeof payload.attributionConfidence === 'number' &&
+        Number.isFinite(payload.attributionConfidence)))
   );
 }
 
