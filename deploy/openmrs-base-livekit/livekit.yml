@@ -93,7 +93,7 @@ services:
       TTS_LANGUAGE: en
       PIPER_BINARY: /srv/piper/piper/piper
       PIPER_MODEL_PATH_ES: /srv/piper/voices/es_MX-claude-high.onnx
-      PIPER_MODEL_PATH_EN: ${PIPER_MODEL_PATH_EN:-/srv/piper/voices/en_US-lessac-medium.onnx}
+      PIPER_MODEL_PATH_EN: ${PIPER_MODEL_PATH_EN:-}
       TURN_DETECTION_MODE: vad
       FILLER_SOUND_ENABLED: 'false'
       ENABLE_OPENMRS_TOOLS: 'true'

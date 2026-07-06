@@ -92,6 +92,7 @@ Optional CPU-only AI settings:
 ```bash
 OLLAMA_MODEL=qwen2.5:1.5b
 WHISPER_MODEL_SIZE=base
+# Optional: set only when the English Piper model is actually present in the agent image or mounted volume.
 PIPER_MODEL_PATH_EN=/srv/piper/voices/en_US-lessac-medium.onnx
 ```
 
@@ -116,10 +117,12 @@ The helper mirrors the real-time agent provider names with
 `services.agentCapabilities` so the frontend does not confuse optional helper
 `/stt` and `/tts` endpoints with the active LiveKit agent pipeline.
 
-The CPU agent image bundles the Spanish Piper voice used by
-`PIPER_MODEL_PATH_ES` and downloads the English `en_US-lessac-medium` Piper
-voice during the agent image build. `PIPER_MODEL_PATH` is a legacy fallback and
-is not set by the compose file.
+The CPU agent image used by this stack bundles the Spanish Piper voice used by
+`PIPER_MODEL_PATH_ES`. English voice output is opt-in: set
+`PIPER_MODEL_PATH_EN` only when the English Piper model is present in the agent
+image or mounted volume. When it is unset, the agent falls back to the Spanish
+Piper voice instead of pointing at a missing model. `PIPER_MODEL_PATH` is a
+legacy fallback and is not set by the compose file.
 
 ## Install Into The OpenMRS Distro
 

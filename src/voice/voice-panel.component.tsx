@@ -11,7 +11,6 @@ import {
   Microphone,
   MicrophoneOff,
   StopFilled,
-  Play,
   Checkmark,
   WarningAlt,
   CircleDash,
@@ -56,12 +55,20 @@ import styles from './voice-panel.scss';
 interface VoicePanelProps {
   onClose?: () => void;
   onPreflightActionsChange?: (actions: VoicePanelPreflightActions | null) => void;
+  onSessionActionsChange?: (actions: VoicePanelSessionActions | null) => void;
 }
 
 export interface VoicePanelPreflightActions {
   startDisabled: boolean;
   startLabel: string;
   onStart: () => void;
+}
+
+export interface VoicePanelSessionActions {
+  demoEnabled: boolean;
+  demoRunning: boolean;
+  onPreviewDemo: () => void;
+  onResetFlow: () => void;
 }
 
 type LanguageCode = ClinicalLanguageCode;
@@ -164,7 +171,11 @@ const initialStepStatus: Record<FlowStep, StepStatus> = {
   openmrsDraft: 'idle',
 };
 
-const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChange }) => {
+const VoicePanel: React.FC<VoicePanelProps> = ({
+  onClose,
+  onPreflightActionsChange,
+  onSessionActionsChange,
+}) => {
   const { t, i18n } = useTranslation();
   const config = useConfig<Config>();
   const { patient, isLoading: patientLoading } = usePatient();
@@ -389,6 +400,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
         patientLanguage={patientLanguage}
         agentVoiceLanguage={agentVoiceLanguage}
         demoFlowEnabled={demoFlowEnabled}
+        onSessionActionsChange={onSessionActionsChange}
       />
     </LiveKitRoom>
   );
@@ -410,6 +422,7 @@ interface ActiveSessionProps {
   patientLanguage: LanguageCode;
   agentVoiceLanguage: LanguageCode;
   demoFlowEnabled: boolean;
+  onSessionActionsChange?: (actions: VoicePanelSessionActions | null) => void;
 }
 
 const ActiveSession: React.FC<ActiveSessionProps> = ({
@@ -424,6 +437,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   patientLanguage,
   agentVoiceLanguage,
   demoFlowEnabled,
+  onSessionActionsChange,
 }) => {
   const { t } = useTranslation();
   const connectionState = useConnectionState();
@@ -456,6 +470,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     agentDraft,
     agentStatus,
     agentError,
+    agentParticipantConnected,
     clearTranscripts,
   } = useAgentData();
 
@@ -569,7 +584,8 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       .join('\n\n');
   }, [agentTranscripts, t]);
 
-  const agentHasActivity = agentTranscripts.length > 0 || Boolean(agentDraft || agentStatus);
+  const agentHasActivity =
+    agentParticipantConnected || agentTranscripts.length > 0 || Boolean(agentDraft || agentStatus);
   const hasFlowOutput = Boolean(draft || redactedTranscript || liveTranscriptText);
 
   useEffect(() => {
@@ -671,6 +687,21 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     lastAppliedAgentDraft.current = null;
     clearTranscripts();
   }, [clearTranscripts]);
+
+  useEffect(() => {
+    if (!onSessionActionsChange) {
+      return;
+    }
+
+    onSessionActionsChange({
+      demoEnabled: demoFlowEnabled,
+      demoRunning,
+      onPreviewDemo: runDemoConversation,
+      onResetFlow: resetFlow,
+    });
+
+    return () => onSessionActionsChange(null);
+  }, [demoFlowEnabled, demoRunning, onSessionActionsChange, resetFlow, runDemoConversation]);
 
   const saveDraft = useCallback(
     async (action: DraftSaveAction) => {
@@ -780,6 +811,11 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       ? t('unmute', 'Unmute')
       : t('mute', 'Mute')
     : t('microphoneUnavailableShort', 'Microphone unavailable');
+  const displayedAgentStatus =
+    agentStatus ||
+    (agentParticipantConnected
+      ? t('agentConnectedWaiting', 'Agent connected. Waiting for speech or draft data.')
+      : '');
 
   const flowSteps: Array<{
     step: FlowStep;
@@ -861,7 +897,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
         mutedLabel={t('muted', 'Muted')}
         activeLabel={t('recording', 'Recording')}
       />
-      {agentStatus && <p className={styles.agentStatus}>{agentStatus}</p>}
+      {displayedAgentStatus && <p className={styles.agentStatus}>{displayedAgentStatus}</p>}
 
       {/* ---- Controls ---- */}
       <div className={styles.controls}>
@@ -874,17 +910,6 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           onClick={toggleMute}
           disabled={!microphoneAvailable}
         />
-        {demoFlowEnabled && (
-          <Button
-            kind="primary"
-            size="md"
-            renderIcon={Play}
-            onClick={runDemoConversation}
-            disabled={demoRunning}
-          >
-            {demoRunning ? t('demoRunning', 'Running demo...') : t('runDemo', 'Run demo conversation')}
-          </Button>
-        )}
         <Button
           kind="danger--ghost"
           size="lg"
@@ -899,21 +924,16 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
         <div className={styles.agentFallback} role="status">
           <WarningAlt />
           <div>
-            <strong>{t('agentNotResponding', 'Agent not publishing data')}</strong>
+            <strong>{t('agentNotConnected', 'Agent not connected')}</strong>
             <p>
               {demoFlowEnabled
                 ? t(
                     'agentNotRespondingDetailWithDemo',
-                    'Start the OpenMRS LiveKit agent for this room, or run the local demo flow while the room stays connected.',
+                    'Start the OpenMRS LiveKit agent for this room, or use Preview demo from the modal actions while the room stays connected.',
                   )
                 : t('agentNotRespondingDetail', 'Start or restart the OpenMRS LiveKit agent for this room.')}
             </p>
           </div>
-          {demoFlowEnabled && (
-            <Button kind="tertiary" size="sm" renderIcon={Play} onClick={runDemoConversation}>
-              {t('runDemo', 'Run demo conversation')}
-            </Button>
-          )}
         </div>
       )}
 
@@ -921,9 +941,6 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       <section className={styles.section} aria-label={t('translationFlow', 'Translation flow')}>
         <div className={styles.sectionHeader}>
           <h5>{t('localAiPipeline', 'Local AI pipeline')}</h5>
-          <Button kind="ghost" size="sm" onClick={resetFlow} disabled={demoRunning}>
-            {t('resetFlow', 'Reset flow')}
-          </Button>
         </div>
 
         <div className={styles.roomLanguageSummary}>

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { agentDataTopic, isAgentDataTopic, parseAgentDataPayload } from './use-agent-data';
+import {
+  agentDataTopic,
+  isAgentDataTopic,
+  isAgentParticipant,
+  parseAgentDataPayload,
+  roomHasAgentParticipant,
+} from './use-agent-data';
 
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 
@@ -8,6 +14,18 @@ describe('parseAgentDataPayload', () => {
     expect(isAgentDataTopic(agentDataTopic)).toBe(true);
     expect(isAgentDataTopic('chat')).toBe(false);
     expect(isAgentDataTopic(undefined)).toBe(false);
+  });
+
+  it('detects LiveKit agent participants from SDK metadata and stable identity fallbacks', () => {
+    expect(isAgentParticipant({ identity: 'worker-1', isAgent: true })).toBe(true);
+    expect(isAgentParticipant({ identity: 'clinical' })).toBe(true);
+    expect(isAgentParticipant({ identity: 'agent-openmrs-voice' })).toBe(true);
+    expect(isAgentParticipant({ identity: 'clinician-123', isAgent: false })).toBe(false);
+  });
+
+  it('detects when a room has a connected agent participant', () => {
+    expect(roomHasAgentParticipant([{ identity: 'clinician-123' }, { identity: 'agent-456' }])).toBe(true);
+    expect(roomHasAgentParticipant([{ identity: 'clinician-123' }])).toBe(false);
   });
 
   it('accepts assistant transcripts and fills a missing timestamp', () => {

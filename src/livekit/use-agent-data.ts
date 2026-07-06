@@ -59,6 +59,7 @@ export function useAgentData() {
   const [agentDraft, setAgentDraft] = useState<AgentDraft | null>(null);
   const [agentStatus, setAgentStatus] = useState<string>('');
   const [agentError, setAgentError] = useState<string | null>(null);
+  const [agentParticipantConnected, setAgentParticipantConnected] = useState(false);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -105,6 +106,30 @@ export function useAgentData() {
     };
   }, [room, handleData]);
 
+  useEffect(() => {
+    if (!room) {
+      setAgentParticipantConnected(false);
+      return;
+    }
+
+    const updateAgentPresence = () => {
+      if (mounted.current) {
+        setAgentParticipantConnected(roomHasAgentParticipant(room.remoteParticipants.values()));
+      }
+    };
+
+    updateAgentPresence();
+    room.on(RoomEvent.ParticipantConnected, updateAgentPresence);
+    room.on(RoomEvent.ParticipantDisconnected, updateAgentPresence);
+    room.on(RoomEvent.ParticipantMetadataChanged, updateAgentPresence);
+
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, updateAgentPresence);
+      room.off(RoomEvent.ParticipantDisconnected, updateAgentPresence);
+      room.off(RoomEvent.ParticipantMetadataChanged, updateAgentPresence);
+    };
+  }, [room]);
+
   const clearTranscripts = useCallback(() => {
     setTranscripts([]);
     setAgentDraft(null);
@@ -117,12 +142,48 @@ export function useAgentData() {
     agentDraft,
     agentStatus,
     agentError,
+    agentParticipantConnected,
     clearTranscripts,
   };
 }
 
 export function isAgentDataTopic(topic: string | undefined): boolean {
   return topic === agentDataTopic;
+}
+
+interface AgentLikeParticipant {
+  identity?: string;
+  isAgent?: boolean;
+  kind?: unknown;
+  attributes?: Readonly<Record<string, string>>;
+}
+
+export function isAgentParticipant(participant: AgentLikeParticipant): boolean {
+  if (participant.isAgent) {
+    return true;
+  }
+
+  const kind = String(participant.kind ?? '').toLowerCase();
+  if (kind.includes('agent')) {
+    return true;
+  }
+
+  const identity = (participant.identity ?? '').toLowerCase();
+  return (
+    identity === 'clinical' ||
+    identity.startsWith('agent-') ||
+    identity.includes('livekit-agent') ||
+    participant.attributes?.['lk.agent'] === 'true'
+  );
+}
+
+export function roomHasAgentParticipant(participants: Iterable<AgentLikeParticipant>): boolean {
+  for (const participant of participants) {
+    if (isAgentParticipant(participant)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function parseAgentDataPayload(payload: Uint8Array, now: () => number = Date.now): ParsedAgentData {
