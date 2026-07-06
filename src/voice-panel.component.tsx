@@ -720,14 +720,14 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     },
   ];
   const aiCapabilityPendingLabel =
-    agentHealth === 'ok' ? t('demoPipeline', 'Demo pipeline') : undefined;
+    agentHealth === 'ok' ? t('activeViaAgent', 'Active via agent') : undefined;
   const sttHealthDetail =
     health.stt === 'pending' && agentHealth === 'ok'
-      ? t('sttDemoPipelineDetail', 'Dedicated STT endpoint is pending; the connected LiveKit agent demo pipeline is active.')
+      ? t('sttAgentPipelineDetail', 'Dedicated STT endpoint is pending; Whisper STT is configured in the connected LiveKit agent.')
       : undefined;
   const ttsHealthDetail =
     health.tts === 'pending' && agentHealth === 'ok'
-      ? t('ttsDemoPipelineDetail', 'Dedicated TTS endpoint is pending; the connected LiveKit agent demo pipeline is active.')
+      ? t('ttsAgentPipelineDetail', 'Dedicated TTS endpoint is pending; Piper TTS is configured in the connected LiveKit agent.')
       : undefined;
 
   return (
