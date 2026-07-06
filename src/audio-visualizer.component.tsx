@@ -36,32 +36,35 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
     setLevel(0);
   }, []);
 
-  const draw = useCallback((timestamp: number) => {
-    const analyser = analyserRef.current;
-    if (!analyser || muted) {
-      resetLevel();
-      return;
-    }
+  const draw = useCallback(
+    (timestamp: number) => {
+      const analyser = analyserRef.current;
+      if (!analyser || muted) {
+        resetLevel();
+        return;
+      }
 
-    const data = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(data);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
 
-    const step = Math.max(1, Math.floor(data.length / barCount));
-    let peak = 0;
+      const step = Math.max(1, Math.floor(data.length / barCount));
+      let peak = 0;
 
-    for (let i = 0; i < barCount; i++) {
-      const sample = data[Math.min(i * step, data.length - 1)] ?? 0;
-      peak = Math.max(peak, sample);
-    }
+      for (let i = 0; i < barCount; i++) {
+        const sample = data[Math.min(i * step, data.length - 1)] ?? 0;
+        peak = Math.max(peak, sample);
+      }
 
-    if (timestamp - lastLevelUpdateRef.current >= levelUpdateIntervalMs) {
-      const nextLevel = Math.round((peak / 255) * 100);
-      setLevel((currentLevel) => (Math.abs(currentLevel - nextLevel) >= 2 ? nextLevel : currentLevel));
-      lastLevelUpdateRef.current = timestamp;
-    }
+      if (timestamp - lastLevelUpdateRef.current >= levelUpdateIntervalMs) {
+        const nextLevel = Math.round((peak / 255) * 100);
+        setLevel((currentLevel) => (Math.abs(currentLevel - nextLevel) >= 2 ? nextLevel : currentLevel));
+        lastLevelUpdateRef.current = timestamp;
+      }
 
-    animRef.current = requestAnimationFrame(draw);
-  }, [barCount, muted, resetLevel]);
+      animRef.current = requestAnimationFrame(draw);
+    },
+    [barCount, muted, resetLevel],
+  );
 
   useEffect(() => {
     if (muted) {

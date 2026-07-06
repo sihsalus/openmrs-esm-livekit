@@ -19,6 +19,8 @@
     "serve": "rspack serve --mode=development",
     "build": "rspack --mode production",
     "prepack": "corepack yarn build",
+    "format": "prettier --write .eslintrc.cjs .prettierrc package.json rspack.config.js tsconfig.json README.md \"{src,__mocks__,token-server,deploy,docs,tools,translations}/**/*.{ts,tsx,js,cjs,json,md,yml,yaml,scss}\"",
+    "format:check": "prettier --check .eslintrc.cjs .prettierrc package.json rspack.config.js tsconfig.json README.md \"{src,__mocks__,token-server,deploy,docs,tools,translations}/**/*.{ts,tsx,js,cjs,json,md,yml,yaml,scss}\"",
     "lint": "eslint src --ext js,jsx,ts,tsx --max-warnings 0",
     "typescript": "tsc",
     "test": "cross-env TZ=UTC vitest run --passWithNoTests",

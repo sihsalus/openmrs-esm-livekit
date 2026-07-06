@@ -37,11 +37,9 @@ describe('microphone availability', () => {
 
   it('preserves permission-denied errors when the microphone API exists', () => {
     expect(
-      microphoneErrorMessage(
-        new Error('Permission denied by user'),
-        t,
-        { mediaDevices: { getUserMedia: () => Promise.resolve({}) } },
-      ),
+      microphoneErrorMessage(new Error('Permission denied by user'), t, {
+        mediaDevices: { getUserMedia: () => Promise.resolve({}) },
+      }),
     ).toBe('Permission denied by user');
   });
 });

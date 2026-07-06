@@ -24,12 +24,12 @@ reviewable OpenMRS payloads.
 
 ## Reviewed Projects
 
-| Project | License | What matters | Reuse decision |
-| --- | --- | --- | --- |
-| [Berta AI Scribe](https://github.com/phairlab/berta-ai-scribe) | Apache 2.0 | Serious FastAPI + Next.js scribe with local/cloud model paths, templates, auth, AWS deployment, and a published deployment paper. | Use as architecture and deployment benchmark. Do not port wholesale before the demo. |
-| [Open Medical Scribe](https://github.com/BirgerMoell/open-medical-scribe) | MIT | Clean provider registry for STT and note generation, local/cloud/hybrid modes, FHIR DocumentReference export, audit logging, and multiple note styles. | Reuse ideas for provider boundaries, audit events, and future FHIR export. |
-| [scribeHC](https://github.com/trevorpfiz/scribeHC) | MIT | Mobile recording plus dashboard workflow using Expo, Next.js, FastAPI, and SOAP note editing. | Useful UX reference only; OpenMRS O3 already owns our frontend surface. |
-| [AI-Scribe](https://github.com/1984Doc/AI-Scribe) | GPL-3.0 | Local Whisper and local LLM scribe pattern. | Reference only. Do not copy code into this repo because GPL would change licensing obligations. |
+| Project                                                                   | License    | What matters                                                                                                                                           | Reuse decision                                                                                  |
+| ------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| [Berta AI Scribe](https://github.com/phairlab/berta-ai-scribe)            | Apache 2.0 | Serious FastAPI + Next.js scribe with local/cloud model paths, templates, auth, AWS deployment, and a published deployment paper.                      | Use as architecture and deployment benchmark. Do not port wholesale before the demo.            |
+| [Open Medical Scribe](https://github.com/BirgerMoell/open-medical-scribe) | MIT        | Clean provider registry for STT and note generation, local/cloud/hybrid modes, FHIR DocumentReference export, audit logging, and multiple note styles. | Reuse ideas for provider boundaries, audit events, and future FHIR export.                      |
+| [scribeHC](https://github.com/trevorpfiz/scribeHC)                        | MIT        | Mobile recording plus dashboard workflow using Expo, Next.js, FastAPI, and SOAP note editing.                                                          | Useful UX reference only; OpenMRS O3 already owns our frontend surface.                         |
+| [AI-Scribe](https://github.com/1984Doc/AI-Scribe)                         | GPL-3.0    | Local Whisper and local LLM scribe pattern.                                                                                                            | Reference only. Do not copy code into this repo because GPL would change licensing obligations. |
 
 ## Adopted Now
 

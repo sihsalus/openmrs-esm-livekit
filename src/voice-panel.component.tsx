@@ -6,16 +6,7 @@ import {
   useLocalParticipant,
 } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
-import {
-  Button,
-  Tag,
-  Tile,
-  TextArea,
-  TextInput,
-  Accordion,
-  AccordionItem,
-  ButtonSet,
-} from '@carbon/react';
+import { Button, Tag, Tile, TextArea, TextInput, Accordion, AccordionItem, ButtonSet } from '@carbon/react';
 import {
   Microphone,
   MicrophoneOff,
@@ -186,10 +177,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   const config = useConfig<Config>();
   const { patient, isLoading: patientLoading } = usePatient();
   const openmrsLocale = openmrsLocaleFromI18n(i18n);
-  const defaultLanguages = useMemo(
-    () => clinicalLanguageDefaultsFromLocale(openmrsLocale),
-    [openmrsLocale],
-  );
+  const defaultLanguages = useMemo(() => clinicalLanguageDefaultsFromLocale(openmrsLocale), [openmrsLocale]);
   const languageSelectionTouched = useRef(false);
   const voiceSelectionTouched = useRef(false);
   const livekitServerUrl = useMemo(
@@ -399,11 +387,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
                 {t('cancel', 'Cancel')}
               </Button>
             )}
-            <Button
-              kind="primary"
-              onClick={connect}
-              disabled={startConsultationDisabled}
-            >
+            <Button kind="primary" onClick={connect} disabled={startConsultationDisabled}>
               <span className={styles.buttonLabelWithIcon}>
                 {startConsultationLabel}
                 <Microphone size={16} />
@@ -593,9 +577,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           `${transcriptRoleLabel(transcript.role, t)} (${transcript.language.toUpperCase()}${transcriptAttributionLabel(
             transcript,
             t,
-          )}): ${
-            transcript.redacted || transcript.text
-          }`,
+          )}): ${transcript.redacted || transcript.text}`,
       )
       .join('\n\n');
   }, [agentTranscripts, t]);
@@ -980,9 +962,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                   onClick={saveDraft}
                   disabled={draftSaving || !patientUuid}
                 >
-                  {draftSaving
-                    ? t('savingDraft', 'Saving draft...')
-                    : t('saveDraft', 'Queue / save draft')}
+                  {draftSaving ? t('savingDraft', 'Saving draft...') : t('saveDraft', 'Queue / save draft')}
                 </Button>
               )}
             </div>
@@ -1141,7 +1121,9 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                     status={sttCapabilityStatus}
                     detail={sttHealthDetail}
                     statusText={
-                      health.stt === 'pending' && sttCapabilityStatus === 'ok' ? aiCapabilityPendingLabel : undefined
+                      health.stt === 'pending' && sttCapabilityStatus === 'ok'
+                        ? aiCapabilityPendingLabel
+                        : undefined
                     }
                   />
                   <HealthRow
@@ -1149,7 +1131,9 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                     status={ttsCapabilityStatus}
                     detail={ttsHealthDetail}
                     statusText={
-                      health.tts === 'pending' && ttsCapabilityStatus === 'ok' ? aiCapabilityPendingLabel : undefined
+                      health.tts === 'pending' && ttsCapabilityStatus === 'ok'
+                        ? aiCapabilityPendingLabel
+                        : undefined
                     }
                   />
                   <HealthRow label="LLM" status={health.llm} />
@@ -1323,10 +1307,7 @@ function transcriptRoleLabel(
   return t('assistant', 'Assistant');
 }
 
-function transcriptAttributionLabel(
-  transcript: AgentTranscript,
-  t: ReturnType<typeof useTranslation>['t'],
-) {
+function transcriptAttributionLabel(transcript: AgentTranscript, t: ReturnType<typeof useTranslation>['t']) {
   const speakerId = transcript.speakerId || transcript.sourceId;
   if (!speakerId) {
     return '';

@@ -4,8 +4,7 @@ export const configSchema = {
   livekitServerUrl: {
     _type: Type.String,
     _default: '',
-    _description:
-      'LiveKit server WebSocket URL. Leave blank to derive ws(s)://<current browser host>:7880.',
+    _description: 'LiveKit server WebSocket URL. Leave blank to derive ws(s)://<current browser host>:7880.',
   },
   tokenEndpoint: {
     _type: Type.String,
@@ -16,7 +15,8 @@ export const configSchema = {
   roomPrefix: {
     _type: Type.String,
     _default: 'openmrs-voice-',
-    _description: 'LiveKit room prefix. The local OpenMRS LiveKit agent currently joins only rooms with this prefix.',
+    _description:
+      'LiveKit room prefix. The local OpenMRS LiveKit agent currently joins only rooms with this prefix.',
   },
 };
 

@@ -181,8 +181,7 @@ function isAgentTranscriptPayload(payload: unknown): payload is AgentTranscriptP
     (payload.attributionMode === undefined || typeof payload.attributionMode === 'string') &&
     (payload.attributionSource === undefined || typeof payload.attributionSource === 'string') &&
     (payload.attributionConfidence === undefined ||
-      (typeof payload.attributionConfidence === 'number' &&
-        Number.isFinite(payload.attributionConfidence)))
+      (typeof payload.attributionConfidence === 'number' && Number.isFinite(payload.attributionConfidence)))
   );
 }
 

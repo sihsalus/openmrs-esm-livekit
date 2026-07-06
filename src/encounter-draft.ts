@@ -19,8 +19,7 @@ export function materializeEncounterDraft(draft: AgentDraft): AgentDraft {
     allergiesMentioned:
       draft.allergiesMentioned.length > 0 ? draft.allergiesMentioned : factValues(facts, allergyKinds),
     assessmentNotes: draft.assessmentNotes.trim() || factValues(facts, assessmentKinds).join('\n'),
-    patientInstructions:
-      draft.patientInstructions.trim() || factValues(facts, instructionKinds).join('\n'),
+    patientInstructions: draft.patientInstructions.trim() || factValues(facts, instructionKinds).join('\n'),
   };
 }
 
@@ -73,5 +72,8 @@ function factValues(facts: AgentClinicalFact[], kinds: string[]): string[] {
 }
 
 function normalizeFactKind(kind: string): string {
-  return kind.trim().toLowerCase().replace(/[-\s]+/g, '_');
+  return kind
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, '_');
 }
