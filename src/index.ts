@@ -14,8 +14,8 @@ export function startupApp() {
   defineConfigSchema(moduleName, configSchema);
 }
 
-export const livekitVoiceButton = getAsyncLifecycle(() => import('./voice-button.component'), options);
+export const livekitVoiceButton = getAsyncLifecycle(() => import('./voice/voice-button.component'), options);
 
-export const livekitVoicePanel = getAsyncLifecycle(() => import('./voice-panel.component'), options);
+export const livekitVoicePanel = getAsyncLifecycle(() => import('./voice/voice-panel.component'), options);
 
-export const livekitVoiceModal = getAsyncLifecycle(() => import('./voice-modal.component'), options);
+export const livekitVoiceModal = getAsyncLifecycle(() => import('./voice/voice-modal.component'), options);

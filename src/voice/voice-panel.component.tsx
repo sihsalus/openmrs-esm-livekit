@@ -28,30 +28,30 @@ import {
   resolveTokenEndpoint,
   resolveTokenServerPath,
   saveOpenmrsDraft,
-} from './livekit-token';
-import { useAgentData, type AgentClinicalFact, type AgentTranscript } from './use-agent-data';
+} from '../livekit/livekit-token';
+import { useAgentData, type AgentClinicalFact, type AgentTranscript } from '../livekit/use-agent-data';
 import {
   checkingHealth,
   initialHealth,
   normalizeTokenServerHealth,
   type ServiceHealth,
   type ServiceStatus,
-} from './agent-health';
+} from '../livekit/agent-health';
 import {
   isBrowserMicrophoneAvailable,
   microphoneErrorMessage,
   microphoneUnavailableMessage,
-} from './microphone-availability';
+} from '../audio/microphone-availability';
 import {
   clinicalLanguageDefaultsFromLocale,
   openmrsLocaleFromI18n,
   type ClinicalLanguageCode,
-} from './clinical-language';
-import { shouldAttemptInitialMicrophoneEnable } from './microphone-control';
-import { mergeEncounterDraft } from './encounter-draft';
-import AudioVisualizer from './audio-visualizer.component';
-import PatientContext from './patient-context.component';
-import type { Config } from './config-schema';
+} from '../clinical/clinical-language';
+import { shouldAttemptInitialMicrophoneEnable } from '../audio/microphone-control';
+import { mergeEncounterDraft } from '../clinical/encounter-draft';
+import AudioVisualizer from '../audio/audio-visualizer.component';
+import PatientContext from '../patient/patient-context.component';
+import type { Config } from '../config-schema';
 import styles from './voice-panel.scss';
 
 interface VoicePanelProps {

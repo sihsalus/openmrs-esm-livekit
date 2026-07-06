@@ -1,4 +1,4 @@
-import type { ClinicalLanguageCode } from './clinical-language';
+import type { ClinicalLanguageCode } from '../clinical/clinical-language';
 
 export interface LivekitRoomLanguageConfig {
   doctorLanguage: ClinicalLanguageCode;
