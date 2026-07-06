@@ -25,7 +25,7 @@
     "test:e2e:token-server": "python3 token-server/e2e_contract_test.py",
     "test:smoke:token-server": "python3 token-server/smoke_test.py",
     "test:watch": "cross-env TZ=UTC vitest watch",
-    "extract-translations": "i18next 'src/**/*.component.tsx' --config ./tools/i18next-parser.config.js"
+    "extract-translations": "i18next 'src/**/*.{ts,tsx}' --config ./tools/i18next-parser.config.cjs"
   },
   "browserslist": [
     "extends browserslist-config-openmrs"
@@ -80,6 +80,7 @@
     "eslint-plugin-prettier": "^5.1.3",
     "eslint-plugin-react-hooks": "^4.6.2",
     "happy-dom": "^20.0.0",
+    "i18next-parser": "^9.3.0",
     "openmrs": "next",
     "prettier": "^3.3.3",
     "react": "^18.3.1",
