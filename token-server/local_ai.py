@@ -22,6 +22,9 @@ OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "45"))
 OPENMRS_BASE_URL = os.environ.get("OPENMRS_BASE_URL", "http://127.0.0.1/openmrs").rstrip("/")
 LIVEKIT_HTTP_URL = os.environ.get("LIVEKIT_HTTP_URL", "http://127.0.0.1:7880").rstrip("/")
 LIVEKIT_AGENT_HEALTH_URL = os.environ.get("LIVEKIT_AGENT_HEALTH_URL", "").strip()
+LIVEKIT_AGENT_STT_PROVIDER = os.environ.get("LIVEKIT_AGENT_STT_PROVIDER", "").strip()
+LIVEKIT_AGENT_TTS_PROVIDER = os.environ.get("LIVEKIT_AGENT_TTS_PROVIDER", "").strip()
+LIVEKIT_AGENT_LLM_PROVIDER = os.environ.get("LIVEKIT_AGENT_LLM_PROVIDER", "").strip()
 DRAFT_STORE_PATH = os.environ.get("DRAFT_STORE_PATH", "/tmp/openmrs-livekit-drafts.jsonl")
 RECORDING_MANIFEST_PATH = os.environ.get(
     "RECORDING_MANIFEST_PATH", "/tmp/openmrs-livekit-recordings.jsonl"
@@ -143,12 +146,16 @@ def build_health_response(room_prefix: str) -> dict[str, Any]:
         "stt": {
             "status": "configured" if stt_engine else "not_configured",
             "engine": stt_engine,
+            "scope": "helper_endpoint",
             "contract": "POST /stt",
+            "description": "Optional dedicated helper endpoint; the real-time room normally uses the LiveKit agent STT provider.",
         },
         "tts": {
             "status": "configured" if tts_engine else "not_configured",
             "engine": tts_engine,
+            "scope": "helper_endpoint",
             "contract": "POST /tts",
+            "description": "Optional dedicated helper endpoint; the real-time room normally uses the LiveKit agent TTS provider.",
         },
         "parser": {
             "status": "ok" if ollama["status"] == "ok" else "fallback",
@@ -160,6 +167,7 @@ def build_health_response(room_prefix: str) -> dict[str, Any]:
             "roomPrefix": room_prefix,
             "contract": "LiveKit data-channel topic agent-data",
         },
+        "agentCapabilities": _agent_capabilities(agent),
         "openmrsDraftWrite": _openmrs_write_status(),
         "syntheticData": {
             "status": "ok",
@@ -199,8 +207,64 @@ def build_health_response(room_prefix: str) -> dict[str, Any]:
         "livekit": services["livekit"]["status"],
         "openmrs": services["openmrs"]["status"],
         "ollama": services["ollama"]["status"],
-        "stt": services["stt"]["status"],
-        "tts": services["tts"]["status"],
+        "stt": services["agentCapabilities"]["stt"]["status"],
+        "tts": services["agentCapabilities"]["tts"]["status"],
+        "helperStt": services["stt"]["status"],
+        "helperTts": services["tts"]["status"],
+    }
+
+
+def _agent_capabilities(agent: dict[str, Any]) -> dict[str, Any]:
+    stt = _agent_provider_capability(
+        LIVEKIT_AGENT_STT_PROVIDER,
+        agent,
+        "LiveKit AgentSession STT provider",
+    )
+    tts = _agent_provider_capability(
+        LIVEKIT_AGENT_TTS_PROVIDER,
+        agent,
+        "LiveKit AgentSession TTS provider",
+    )
+    llm = _agent_provider_capability(
+        LIVEKIT_AGENT_LLM_PROVIDER,
+        agent,
+        "LiveKit agent LLM/tool provider",
+    )
+    statuses = [stt["status"], tts["status"], llm["status"]]
+    if all(status == "configured" for status in statuses):
+        status = "configured"
+    elif any(status == "unreachable" for status in statuses):
+        status = "unreachable"
+    elif any(status == "pending" for status in statuses):
+        status = "pending"
+    else:
+        status = "not_configured"
+
+    return {
+        "status": status,
+        "source": "livekit-agent",
+        "contract": "Real-time LiveKit AgentSession providers used inside the audio room.",
+        "stt": stt,
+        "tts": tts,
+        "llm": llm,
+    }
+
+
+def _agent_provider_capability(provider: str, agent: dict[str, Any], contract: str) -> dict[str, Any]:
+    if not provider:
+        status = "not_configured"
+    elif agent.get("status") == "ok":
+        status = "configured"
+    elif agent.get("status") in {"unreachable", "error"}:
+        status = "unreachable"
+    else:
+        status = "pending"
+
+    return {
+        "status": status,
+        "provider": provider or None,
+        "scope": "livekit_agent",
+        "contract": contract,
     }
 
 

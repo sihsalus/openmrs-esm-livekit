@@ -74,6 +74,13 @@ WHISPER_MODEL_SIZE=base
 PIPER_MODEL_PATH_EN=/srv/piper/voices/en_US-lessac-medium.onnx
 ```
 
+The helper mirrors the real-time agent provider names with
+`LIVEKIT_AGENT_LLM_PROVIDER`, `LIVEKIT_AGENT_STT_PROVIDER`, and
+`LIVEKIT_AGENT_TTS_PROVIDER`. Keep those values aligned with the agent
+`LLM_PROVIDER`, `STT_PROVIDER`, and `TTS_PROVIDER`; `/health` uses them under
+`services.agentCapabilities` so the frontend does not confuse optional helper
+`/stt` and `/tts` endpoints with the active LiveKit agent pipeline.
+
 The CPU agent image currently bundles the Spanish Piper voice used by
 `PIPER_MODEL_PATH_ES`. Set `PIPER_MODEL_PATH_EN` only after adding or mounting an
 English Piper model at that path. `PIPER_MODEL_PATH` is a legacy fallback and is

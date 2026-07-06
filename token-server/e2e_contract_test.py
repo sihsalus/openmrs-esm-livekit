@@ -244,6 +244,9 @@ class TokenServerE2ETest(unittest.TestCase):
                 "OPENMRS_BASE_URL": f"{cls.openmrs_url}/openmrs",
                 "LIVEKIT_HTTP_URL": cls.livekit_url,
                 "LIVEKIT_AGENT_HEALTH_URL": f"{cls.agent_url}/metrics",
+                "LIVEKIT_AGENT_LLM_PROVIDER": "ollama",
+                "LIVEKIT_AGENT_STT_PROVIDER": "whisper",
+                "LIVEKIT_AGENT_TTS_PROVIDER": "piper",
                 "DRAFT_STORE_PATH": str(Path(cls.tempdir.name) / "drafts.jsonl"),
                 "RECORDING_MANIFEST_PATH": str(Path(cls.tempdir.name) / "recordings.jsonl"),
                 "AUDIT_LOG_PATH": str(Path(cls.tempdir.name) / "audit.jsonl"),
@@ -309,6 +312,18 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["services"]["productionReadiness"]["status"], "enforced")
         self.assertEqual(payload["services"]["agent"]["status"], "ok")
         self.assertEqual(payload["services"]["agent"]["contract"], "LiveKit data-channel topic agent-data")
+        self.assertEqual(payload["services"]["stt"]["scope"], "helper_endpoint")
+        self.assertEqual(payload["services"]["tts"]["scope"], "helper_endpoint")
+        self.assertEqual(payload["services"]["agentCapabilities"]["status"], "configured")
+        self.assertEqual(payload["services"]["agentCapabilities"]["source"], "livekit-agent")
+        self.assertEqual(payload["services"]["agentCapabilities"]["stt"]["provider"], "whisper")
+        self.assertEqual(payload["services"]["agentCapabilities"]["stt"]["scope"], "livekit_agent")
+        self.assertEqual(payload["services"]["agentCapabilities"]["tts"]["provider"], "piper")
+        self.assertEqual(payload["services"]["agentCapabilities"]["llm"]["provider"], "ollama")
+        self.assertEqual(payload["stt"], "configured")
+        self.assertEqual(payload["tts"], "configured")
+        self.assertEqual(payload["helperStt"], "not_configured")
+        self.assertEqual(payload["helperTts"], "not_configured")
         self.assertEqual(payload["services"]["openmrsDraftWrite"]["status"], "configured")
         self.assertEqual(payload["services"]["draftAudit"]["status"], "enabled")
         self.assertFalse(payload["services"]["draftAudit"]["rawClinicalTextStored"])

@@ -24,17 +24,23 @@ Returns local service status for the frontend status panel.
   "livekit": "ok",
   "openmrs": "ok",
   "ollama": "ok",
-  "agent": "ok",
-  "stt": "not_configured",
-  "tts": "not_configured"
+  "stt": "configured",
+  "tts": "configured",
+  "helperStt": "not_configured",
+  "helperTts": "not_configured"
 }
 ```
 
 Detailed service status is available under `services`, including `services.openmrsDraftWrite` for OpenMRS REST write readiness.
 `services.agent` probes `LIVEKIT_AGENT_HEALTH_URL` when configured; in the
 self-hosted stack it points at the LiveKit agent metrics endpoint. The helper's
-`services.stt` and `services.tts` describe optional dedicated helper endpoints,
-not the embedded Whisper/Piper providers used by the real-time agent.
+`services.stt` and `services.tts` describe optional dedicated helper endpoints.
+The real-time audio room uses `services.agentCapabilities.stt`,
+`services.agentCapabilities.tts`, and `services.agentCapabilities.llm`, which
+are populated from `LIVEKIT_AGENT_STT_PROVIDER`,
+`LIVEKIT_AGENT_TTS_PROVIDER`, and `LIVEKIT_AGENT_LLM_PROVIDER`. The top-level
+`stt` and `tts` fields summarize the real-time agent capability; `helperStt`
+and `helperTts` summarize the optional helper endpoints.
 `services.livekitTokenSigning` reports whether `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` are configured.
 `services.cors` reports whether browser origins are allowlisted, and
 `services.productionReadiness` reports whether production checks are enforced.
