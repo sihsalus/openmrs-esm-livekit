@@ -1,14 +1,22 @@
+import type { ClinicalLanguageCode } from './clinical-language';
+
+export interface LivekitRoomLanguageConfig {
+  doctorLanguage: ClinicalLanguageCode;
+  patientLanguage: ClinicalLanguageCode;
+}
+
 export async function fetchLivekitToken(
   patientUuid: string,
   tokenEndpoint: string,
   roomPrefix: string,
+  languageConfig: LivekitRoomLanguageConfig,
 ): Promise<{ token: string; roomName: string }> {
   const roomName = buildRoomName(patientUuid, roomPrefix);
   const res = await fetch(tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ patientUuid, roomName, roomPrefix }),
+    body: JSON.stringify({ patientUuid, roomName, roomPrefix, ...languageConfig }),
   });
   if (!res.ok) {
     throw new Error(`Token request failed: ${res.status}`);
