@@ -22,12 +22,17 @@ Returns local service status for the frontend status panel.
   "livekit": "ok",
   "openmrs": "ok",
   "ollama": "ok",
+  "agent": "ok",
   "stt": "not_configured",
   "tts": "not_configured"
 }
 ```
 
 Detailed service status is available under `services`, including `services.openmrsDraftWrite` for OpenMRS REST write readiness.
+`services.agent` probes `LIVEKIT_AGENT_HEALTH_URL` when configured; in the
+self-hosted stack it points at the LiveKit agent metrics endpoint. The helper's
+`services.stt` and `services.tts` describe optional dedicated helper endpoints,
+not the embedded Whisper/Piper providers used by the real-time agent.
 `services.livekitTokenSigning` reports whether `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` are configured.
 `services.cors` reports whether browser origins are allowlisted, and
 `services.productionReadiness` reports whether production checks are enforced.
@@ -50,7 +55,7 @@ The helper provides local contracts that support the demo and smoke tests:
 
 `/compile-encounter` uses local Ollama when available and falls back to
 deterministic heuristics. Its model is selected with `OLLAMA_MODEL`; examples
-use `medgemma:latest`, while the agent's local-first default uses `qwen3:8b`.
+use `medgemma:latest`, while the agent's local-first CPU default uses `qwen2.5:1.5b`.
 The frontend and helper do not embed model secrets in browser code.
 
 ## Production readiness gate
