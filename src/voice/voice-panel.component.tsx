@@ -21,6 +21,7 @@ import {
 import { useConfig, usePatient, useVisit } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
 import {
+  buildOpenmrsDraftWritePayload,
   buildQueuedOpenmrsDraftPayload,
   fetchLivekitToken,
   saveOpenmrsDraft,
@@ -62,6 +63,7 @@ export interface VoicePanelPreflightActions {
 }
 
 type LanguageCode = ClinicalLanguageCode;
+type DraftSaveAction = 'queue' | 'openmrs';
 type FlowStep =
   | 'doctorStt'
   | 'doctorTranslation'
@@ -432,11 +434,15 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const [demoRunning, setDemoRunning] = useState(false);
   const [redactedTranscript, setRedactedTranscript] = useState('');
   const [draft, setDraft] = useState<EncounterDraft | null>(null);
-  const [draftSaved, setDraftSaved] = useState(false);
-  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftQueued, setDraftQueued] = useState(false);
+  const [draftOpenmrsSaved, setDraftOpenmrsSaved] = useState(false);
+  const [draftEncounterUuid, setDraftEncounterUuid] = useState<string | null>(null);
+  const [draftSavingAction, setDraftSavingAction] = useState<DraftSaveAction | null>(null);
   const [draftSaveMessage, setDraftSaveMessage] = useState<string | null>(null);
   const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [health, setHealth] = useState<ServiceHealth>(initialHealth);
+  const draftSaved = draftQueued || draftOpenmrsSaved;
+  const draftSaving = draftSavingAction !== null;
   const microphoneAvailable = isBrowserMicrophoneAvailable();
   const timeouts = useRef<number[]>([]);
   const lastAppliedAgentDraft = useRef<EncounterDraft | null>(null);
@@ -524,7 +530,9 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
 
     lastAppliedAgentDraft.current = agentDraft;
     setDraft((currentDraft) => mergeEncounterDraft(currentDraft, agentDraft));
-    setDraftSaved(false);
+    setDraftQueued(false);
+    setDraftOpenmrsSaved(false);
+    setDraftEncounterUuid(null);
     setDraftSaveMessage(null);
     setDraftSaveError(null);
   }, [agentDraft, demoRunning]);
@@ -606,7 +614,9 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     setDemoRunning(true);
     setRedactedTranscript('');
     setDraft(null);
-    setDraftSaved(false);
+    setDraftQueued(false);
+    setDraftOpenmrsSaved(false);
+    setDraftEncounterUuid(null);
     setDraftSaveMessage(null);
     setDraftSaveError(null);
     setStepStatus(initialStepStatus);
@@ -628,8 +638,10 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     setStepStatus(initialStepStatus);
     setRedactedTranscript('');
     setDraft(null);
-    setDraftSaved(false);
-    setDraftSaving(false);
+    setDraftQueued(false);
+    setDraftOpenmrsSaved(false);
+    setDraftEncounterUuid(null);
+    setDraftSavingAction(null);
     setDraftSaveMessage(null);
     setDraftSaveError(null);
     setDemoRunning(false);
@@ -637,30 +649,87 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     clearTranscripts();
   }, [clearTranscripts]);
 
-  const saveDraft = useCallback(async () => {
-    if (!draft || !patientUuid || draftSaving) return;
+  const saveDraft = useCallback(
+    async (action: DraftSaveAction) => {
+      if (!draft || !patientUuid || draftSaving || draftOpenmrsSaved) return;
 
-    setDraftSaving(true);
-    setDraftSaveError(null);
-    setDraftSaveMessage(null);
-    try {
-      const result = await saveOpenmrsDraft(
-        tokenEndpoint,
-        buildQueuedOpenmrsDraftPayload({
+      if (action === 'openmrs' && health.openmrsDraftWrite !== 'ok') {
+        setDraftSaveError(
+          t(
+            'openmrsDraftWriteUnavailable',
+            'OpenMRS encounter write is not configured or is still checking. Queue the draft or try again after service health is healthy.',
+          ),
+        );
+        return;
+      }
+
+      if (action === 'openmrs' && !visitUuid) {
+        setDraftSaveError(
+          t(
+            'activeVisitRequiredForOpenmrsSave',
+            'Start an active visit before saving this draft to OpenMRS.',
+          ),
+        );
+        return;
+      }
+
+      setDraftSavingAction(action);
+      setDraftSaveError(null);
+      setDraftSaveMessage(null);
+      try {
+        const draftPayload = {
           patientUuid,
           visitUuid,
           draft,
           redactedTranscript: redactedTranscript || liveTranscriptText,
-        }),
-      );
-      setDraftSaved(true);
-      setDraftSaveMessage(result.message || t('queuedForReview', 'Queued for clinician review'));
-    } catch (err) {
-      setDraftSaveError(err instanceof Error ? err.message : t('failedToSaveDraft', 'Failed to save draft'));
-    } finally {
-      setDraftSaving(false);
-    }
-  }, [draft, draftSaving, liveTranscriptText, patientUuid, redactedTranscript, t, tokenEndpoint, visitUuid]);
+        };
+        const result = await saveOpenmrsDraft(
+          tokenEndpoint,
+          action === 'openmrs'
+            ? buildOpenmrsDraftWritePayload(draftPayload)
+            : buildQueuedOpenmrsDraftPayload(draftPayload),
+        );
+
+        setDraftQueued(true);
+        if (action === 'openmrs') {
+          if (result.openmrsWrite !== 'created') {
+            setDraftSaveError(
+              result.message ||
+                t(
+                  'openmrsEncounterCreateFailed',
+                  'OpenMRS did not create the encounter. The draft was kept in the review queue.',
+                ),
+            );
+            return;
+          }
+          setDraftOpenmrsSaved(true);
+          setDraftEncounterUuid(result.encounterUuid ?? null);
+          setDraftSaveMessage(result.message || t('savedToOpenmrs', 'Saved to OpenMRS'));
+          return;
+        }
+
+        setDraftSaveMessage(result.message || t('queuedForReview', 'Queued for clinician review'));
+      } catch (err) {
+        setDraftSaveError(
+          err instanceof Error ? err.message : t('failedToSaveDraft', 'Failed to save draft'),
+        );
+      } finally {
+        setDraftSavingAction(null);
+      }
+    },
+    [
+      draft,
+      draftOpenmrsSaved,
+      draftSaving,
+      health.openmrsDraftWrite,
+      liveTranscriptText,
+      patientUuid,
+      redactedTranscript,
+      t,
+      tokenEndpoint,
+      visitUuid,
+    ],
+  );
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -724,7 +793,8 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       detail: t('openmrsDraftDetail', 'Compile an anonymized, clinician-reviewable encounter draft.'),
     },
   ];
-  const draftWriteQueued = health.openmrsDraftWrite === 'pending';
+  const draftWriteConfigured = health.openmrsDraftWrite === 'ok';
+  const draftWriteUnavailable = health.openmrsDraftWrite !== 'ok';
 
   return (
     <div className={styles.session}>
@@ -888,34 +958,64 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           <div className={styles.sectionHeader}>
             <h5>{t('encounterDraft', 'Encounter draft')}</h5>
             <div className={styles.headerActions}>
-              {draft.clinicianReviewRequired !== false && !draftSaved && (
+              {draft.clinicianReviewRequired !== false && !draftOpenmrsSaved && (
                 <Tag type="purple" size="sm" renderIcon={WarningAlt}>
                   {t('reviewRequired', 'Review required')}
                 </Tag>
               )}
-              {draftSaved ? (
-                <Tag type="green" size="sm" renderIcon={Checkmark}>
+              {draftQueued && !draftOpenmrsSaved && (
+                <Tag type="blue" size="sm" renderIcon={Checkmark}>
                   {t('queuedForReview', 'Queued for clinician review')}
                 </Tag>
-              ) : (
+              )}
+              {draftOpenmrsSaved ? (
+                <Tag type="green" size="sm" renderIcon={Checkmark}>
+                  {t('savedToOpenmrs', 'Saved to OpenMRS')}
+                </Tag>
+              ) : null}
+              {!draftQueued && !draftOpenmrsSaved && (
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  renderIcon={Save}
+                  onClick={() => saveDraft('queue')}
+                  disabled={draftSaving || !patientUuid}
+                >
+                  {draftSavingAction === 'queue'
+                    ? t('savingDraft', 'Saving draft...')
+                    : t('queueDraft', 'Queue draft')}
+                </Button>
+              )}
+              {!draftOpenmrsSaved && (
                 <Button
                   kind="primary"
                   size="sm"
                   renderIcon={Save}
-                  onClick={saveDraft}
-                  disabled={draftSaving || !patientUuid}
+                  onClick={() => saveDraft('openmrs')}
+                  disabled={draftSaving || !patientUuid || !visitUuid || !draftWriteConfigured}
                 >
-                  {draftSaving ? t('savingDraft', 'Saving draft...') : t('queueDraft', 'Queue draft')}
+                  {draftSavingAction === 'openmrs'
+                    ? t('savingToOpenmrs', 'Saving to OpenMRS...')
+                    : draftQueued
+                      ? t('saveQueuedDraftToOpenmrs', 'Save queued draft to OpenMRS')
+                      : t('saveToOpenmrs', 'Save to OpenMRS')}
                 </Button>
               )}
             </div>
           </div>
           {draftSaveMessage && <p className={styles.agentStatus}>{draftSaveMessage}</p>}
-          {draftWriteQueued && !draftSaved && (
+          {draftEncounterUuid && (
+            <p className={styles.agentStatus}>
+              {t('openmrsEncounterUuid', 'OpenMRS encounter UUID: {{encounterUuid}}', {
+                encounterUuid: draftEncounterUuid,
+              })}
+            </p>
+          )}
+          {draftWriteUnavailable && !draftOpenmrsSaved && (
             <p className={styles.agentStatus}>
               {t(
                 'draftReviewQueueOnlyDetail',
-                'OpenMRS encounter write is not configured yet; this draft will stay in the review queue.',
+                'OpenMRS encounter write is not configured or is still checking; this draft can stay in the review queue.',
               )}
             </p>
           )}

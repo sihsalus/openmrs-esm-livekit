@@ -91,6 +91,15 @@ export function buildQueuedOpenmrsDraftPayload(
   };
 }
 
+export function buildOpenmrsDraftWritePayload(
+  payload: Omit<OpenmrsDraftPayload, 'writeToOpenmrs'>,
+): OpenmrsDraftPayload {
+  return {
+    ...payload,
+    writeToOpenmrs: true,
+  };
+}
+
 export async function saveOpenmrsDraft(
   tokenEndpoint: string,
   payload: OpenmrsDraftPayload,

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildOpenmrsDraftWritePayload,
   buildQueuedOpenmrsDraftPayload,
   buildRoomName,
   fetchLivekitToken,
@@ -74,6 +75,28 @@ describe('LiveKit token endpoint transport', () => {
       patientUuid: 'patient-123',
       visitUuid: 'active-visit-123',
       writeToOpenmrs: false,
+    });
+  });
+
+  it('builds reviewed draft payloads that explicitly request an OpenMRS write', () => {
+    expect(
+      buildOpenmrsDraftWritePayload({
+        patientUuid: 'patient-123',
+        draft: {
+          chiefComplaint: 'Cough',
+          symptoms: ['cough'],
+          medicationsMentioned: [],
+          allergiesMentioned: [],
+          assessmentNotes: 'Reviewed.',
+          patientInstructions: 'Return if symptoms worsen.',
+        },
+        redactedTranscript: 'Doctor: cough',
+        visitUuid: 'active-visit-123',
+      }),
+    ).toMatchObject({
+      patientUuid: 'patient-123',
+      visitUuid: 'active-visit-123',
+      writeToOpenmrs: true,
     });
   });
 
