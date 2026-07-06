@@ -114,7 +114,6 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       </div>
       <ProgressBar
         className={styles.audioMeterProgress}
-        helperText={muted ? mutedLabel : activeLabel}
         label={label}
         max={100}
         size="small"

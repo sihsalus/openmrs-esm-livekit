@@ -1,6 +1,6 @@
 {
   "name": "@sihsalus/esm-livekit-app",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "license": "MPL-2.0",
   "description": "OpenMRS O3 microfrontend for LiveKit voice clinical consultations",
   "browser": "dist/openmrs-esm-livekit-app.js",
