@@ -78,6 +78,16 @@ Repository layout:
 | `deploy/openmrs-base-livekit/` | Reproducible OpenMRS base stack integration with LiveKit server, CPU agent, helper service, gateway routes, CSP, and frontend config. |
 | `translations/`                | English and Spanish UI messages.                                                                                                      |
 
+Frontend source is grouped by domain:
+
+| Path            | Purpose                                                                                  |
+| --------------- | ---------------------------------------------------------------------------------------- |
+| `src/voice/`    | OpenMRS voice action, modal, consultation panel, and voice panel styles.                 |
+| `src/audio/`    | Audio visualizer and microphone availability/control helpers.                            |
+| `src/livekit/`  | LiveKit token client, agent data-channel parser, helper health normalization, and tests. |
+| `src/patient/`  | Patient context loading, demographics normalization, patient context UI, and tests.      |
+| `src/clinical/` | Clinical language defaults and encounter draft merging/materialization.                  |
+
 ## AI Model Boundary
 
 The browser frontend does not hardcode or run a foundation model. It connects the

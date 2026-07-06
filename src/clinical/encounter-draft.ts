@@ -1,4 +1,4 @@
-import type { AgentClinicalFact, AgentDraft } from './use-agent-data';
+import type { AgentClinicalFact, AgentDraft } from '../livekit/use-agent-data';
 
 const chiefComplaintKinds = ['chief_complaint', 'complaint', 'reason_for_visit'];
 const symptomKinds = ['symptom', 'symptoms'];
