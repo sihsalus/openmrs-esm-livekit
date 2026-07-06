@@ -27,6 +27,7 @@ describe('agent health normalization', () => {
           tts: { status: 'configured' },
           llm: { status: 'configured' },
           ollama: { status: 'error' },
+          tokenServerAuth: { status: 'enforced' },
           productionReadiness: { status: 'enforced' },
           cors: { status: 'configured' },
           localStorage: { status: 'private_files' },
@@ -44,6 +45,7 @@ describe('agent health normalization', () => {
       ttsSource: 'helper',
       llm: 'ok',
       llmSource: 'helper',
+      tokenServerAuth: 'ok',
       productionReadiness: 'ok',
       cors: 'ok',
       localStorage: 'ok',
@@ -62,6 +64,7 @@ describe('agent health normalization', () => {
           stt: { status: 'not_configured' },
           tts: { status: 'configured' },
           ollama: { status: 'error' },
+          tokenServerAuth: { status: 'disabled' },
         },
       }),
     ).toMatchObject({
@@ -74,6 +77,7 @@ describe('agent health normalization', () => {
       ttsSource: 'helper',
       llm: 'error',
       llmSource: 'helper',
+      tokenServerAuth: 'pending',
     });
 
     expect(
@@ -109,6 +113,7 @@ describe('agent health normalization', () => {
             tts: { status: 'configured', provider: 'piper', scope: 'livekit_agent' },
             llm: { status: 'configured', provider: 'ollama', scope: 'livekit_agent' },
           },
+          tokenServerAuth: { status: 'enforced' },
           productionReadiness: { status: 'demo_mode' },
           cors: { status: 'configured' },
           localStorage: { status: 'private_files' },

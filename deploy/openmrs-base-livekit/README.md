@@ -25,7 +25,7 @@ The OpenMRS frontend assembly installs the microfrontend from npm. Set
 contains the commit you want to deploy:
 
 ```bash
-OPENMRS_LIVEKIT_FRONTEND_VERSION=0.1.9
+OPENMRS_LIVEKIT_FRONTEND_VERSION=0.1.23
 ```
 
 Verify the package before rebuilding the OpenMRS frontend:
@@ -51,15 +51,15 @@ unrelated `@openmrs/*` registry timeouts, deploy the published npm tarball as th
 temporary importmap hotfix instead of using a local build:
 
 ```bash
-npm pack @sihsalus/esm-livekit-app@0.1.9
-tar -xzf sihsalus-esm-livekit-app-0.1.9.tgz
+npm pack @sihsalus/esm-livekit-app@0.1.23
+tar -xzf sihsalus-esm-livekit-app-0.1.23.tgz
 ```
 
 Copy `package/dist/*` into the frontend nginx document root under
-`sihsalus-esm-livekit-app-0.1.9/`, then point `importmap.json` at:
+`sihsalus-esm-livekit-app-0.1.23/`, then point `importmap.json` at:
 
 ```text
-./sihsalus-esm-livekit-app-0.1.9/openmrs-esm-livekit-app.js
+./sihsalus-esm-livekit-app-0.1.23/openmrs-esm-livekit-app.js
 ```
 
 Keep `frontend/spa-assemble-config.json` on the same published version so the
@@ -73,6 +73,20 @@ OLLAMA_MODEL=qwen2.5:1.5b
 WHISPER_MODEL_SIZE=base
 PIPER_MODEL_PATH_EN=/srv/piper/voices/en_US-lessac-medium.onnx
 ```
+
+Production-like shared deployments should also set:
+
+```bash
+TOKEN_SERVER_ENV=production
+TOKEN_SERVER_REQUIRE_OPENMRS_SESSION=true
+TOKEN_SERVER_ALLOWED_ORIGINS=https://openmrs.example.org
+```
+
+The base gateway exposes helper endpoints at both `/openmrs/livekit/*` and
+`/livekit/*`. The frontend is configured to use `/openmrs/livekit/token` so
+OpenMRS session cookies scoped to `/openmrs` can reach the helper when session
+validation is enabled. Keep `/livekit/*` for compatibility and direct health
+probes through the gateway.
 
 The helper mirrors the real-time agent provider names with
 `LIVEKIT_AGENT_LLM_PROVIDER`, `LIVEKIT_AGENT_STT_PROVIDER`, and
@@ -112,11 +126,12 @@ the script can reuse the installed `deploy/livekit/livekit-docker.yaml`.
 The script updates:
 
 - `frontend/spa-assemble-config.json` with `@sihsalus/esm-livekit-app`.
-- `frontend/config-core_demo.json` with the `/livekit/token` endpoint.
+- `frontend/config-core_demo.json` with the `/openmrs/livekit/token` endpoint.
 - `frontend/config-core_demo.json` with `OPENMRS_LIVEKIT_SERVER_URL` when set,
   for example `wss://openmrs.example.org/livekit-sfu`.
 - `frontend/Dockerfile` with npm registry retry settings for slower servers.
-- gateway templates with `/livekit/*`, `/livekit-sfu/*`, and LiveKit CSP entries.
+- gateway templates with `/openmrs/livekit/*`, `/livekit/*`, `/livekit-sfu/*`,
+  and LiveKit CSP entries.
 - `deploy/livekit/livekit-docker.yaml` with the constrained UDP port range.
 - `.env` with LiveKit credentials, allowed origins, audit salt, and paths.
 
@@ -151,7 +166,7 @@ docker compose \
 
 ```bash
 docker compose ps
-curl http://localhost:7890/health
+curl http://<openmrs-host>/openmrs/livekit/health
 docker logs openmrs-distro-referenceapplication-livekit-helper-1
 docker logs openmrs-distro-referenceapplication-livekit-agent-cpu-1
 ```

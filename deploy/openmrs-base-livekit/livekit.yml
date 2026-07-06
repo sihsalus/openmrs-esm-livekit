@@ -5,7 +5,7 @@ services:
       LIVEKIT_TOKEN_HOST: livekit-helper
 
   livekit:
-    image: livekit/livekit-server:latest
+    image: ${LIVEKIT_IMAGE:-livekit/livekit-server@sha256:483b8b7b5b0654f91f1e8bdc7b46fcd37fd9911612ecf627f97e3185a89825bd}
     command: ['--config', '/etc/livekit.yaml']
     restart: unless-stopped
     ports:
@@ -16,7 +16,7 @@ services:
       - ${OPENMRS_DISTRO_ROOT:?OPENMRS_DISTRO_ROOT is required}/deploy/livekit/livekit-docker.yaml:/etc/livekit.yaml:ro
 
   ollama:
-    image: ollama/ollama:latest
+    image: ${OLLAMA_IMAGE:-ollama/ollama@sha256:f1a705f2bd113fb8d15f85f7c217f0dc5f6bebda6b0cc42b82c3ad165ffcb9dc}
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: 30m
@@ -26,7 +26,7 @@ services:
       - ollama-data:/root/.ollama
 
   livekit-helper:
-    image: openmrs-base-livekit-helper:latest
+    image: ${OPENMRS_LIVEKIT_HELPER_IMAGE:-openmrs-base-livekit-helper:0.1.23}
     build:
       context: ${OPENMRS_ESM_LIVEKIT_PATH:?OPENMRS_ESM_LIVEKIT_PATH is required}
       dockerfile: ${OPENMRS_DISTRO_ROOT:?OPENMRS_DISTRO_ROOT is required}/deploy/livekit/token-server.Dockerfile
@@ -35,11 +35,12 @@ services:
       - livekit
       - backend
       - ollama
-    ports:
-      - '7890:7890'
+    expose:
+      - '7890'
     environment:
       TOKEN_SERVER_PORT: '7890'
       TOKEN_SERVER_ENV: ${TOKEN_SERVER_ENV:-development}
+      TOKEN_SERVER_REQUIRE_OPENMRS_SESSION: ${TOKEN_SERVER_REQUIRE_OPENMRS_SESSION:-false}
       TOKEN_SERVER_ALLOWED_ORIGINS: ${TOKEN_SERVER_ALLOWED_ORIGINS:-}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}
@@ -60,7 +61,7 @@ services:
       - livekit-helper-data:/data
 
   livekit-agent-cpu:
-    image: openmrs-livekit-agent-cpu:latest
+    image: ${OPENMRS_LIVEKIT_AGENT_CPU_IMAGE:-openmrs-livekit-agent-cpu:0.1.0}
     build:
       context: ${OPENMRS_LIVEKIT_AGENT_PATH:?OPENMRS_LIVEKIT_AGENT_PATH is required}
       dockerfile: ${OPENMRS_DISTRO_ROOT:?OPENMRS_DISTRO_ROOT is required}/deploy/livekit/agent-cpu.Dockerfile

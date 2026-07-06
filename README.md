@@ -136,8 +136,12 @@ token-server/.venv/bin/pip install -r token-server/requirements.txt
 LIVEKIT_API_KEY=<key> LIVEKIT_API_SECRET=<secret> token-server/.venv/bin/python token-server/server.py
 ```
 
-The helper listens on port `7890` by default. When OpenMRS config is left blank,
-the frontend derives:
+The standalone helper listens on port `7890` by default. The OpenMRS base
+deployment does not expose that port on the host; browser traffic should go
+through the gateway. Base deployments use `/openmrs/livekit/token` so OpenMRS
+session cookies scoped to `/openmrs` can reach the helper when session
+validation is enabled. When OpenMRS config is left blank, the frontend derives
+standalone development endpoints:
 
 | Setting           | Derived default                               |
 | ----------------- | --------------------------------------------- |
@@ -209,30 +213,31 @@ automatic doctor/patient diarization.
 The helper is not the realtime conversational agent. It provides local contracts
 that support the frontend, validation workflows, and smoke tests.
 
-| Endpoint                       | Contract                                                                                                                                   |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /health`                  | Reports LiveKit, OpenMRS, Ollama, agent, STT/TTS, token signing, CORS, local storage, draft audit, and production readiness status.        |
-| `POST /token`                  | Returns an HS256 LiveKit JWT with a room-scoped join grant and optional room metadata sync.                                                |
-| `POST /compile-encounter`      | Redacts PHI-like text and compiles a clinician-reviewable OpenMRS draft using Ollama when available or deterministic heuristics otherwise. |
-| `POST /synthetic-consultation` | Generates deterministic synthetic dialogue, redacted transcript, draft, and an `openmrsDraftRequest` for validation and e2e tests.         |
-| `POST /recording/session`      | Records a consent manifest for future recording workflow; it does not capture or store raw audio by default.                               |
-| `POST /openmrs/draft`          | Queues a draft locally by default and can optionally create an OpenMRS encounter through `/openmrs/ws/rest/v1`.                            |
+| Endpoint                       | Contract                                                                                                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`                  | Reports LiveKit, OpenMRS, Ollama, agent, STT/TTS, token signing, CORS, local storage, draft audit, and production readiness status.                                          |
+| `POST /token`                  | Returns an HS256 LiveKit JWT with a room-scoped join grant and optional room metadata sync.                                                                                  |
+| `POST /compile-encounter`      | Requires `transcript` or `text`, redacts PHI-like text, and compiles a clinician-reviewable OpenMRS draft using Ollama when available or deterministic heuristics otherwise. |
+| `POST /synthetic-consultation` | Generates deterministic synthetic dialogue, redacted transcript, draft, and an `openmrsDraftRequest` for validation and e2e tests.                                           |
+| `POST /recording/session`      | Records a consent manifest for future recording workflow; it does not capture or store raw audio by default.                                                                 |
+| `POST /openmrs/draft`          | Queues a draft locally by default and can optionally create an OpenMRS encounter through `/openmrs/ws/rest/v1`.                                                              |
 
 Important helper environment variables:
 
-| Variable                                 | Use                                                                                               |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`  | LiveKit token signing. Missing values fall back to LiveKit dev defaults only in development mode. |
-| `LIVEKIT_HTTP_URL`                       | Optional LiveKit HTTP API URL for best-effort room metadata sync.                                 |
-| `LIVEKIT_ROOM_PREFIX`                    | Room prefix shared by frontend, helper, and agent.                                                |
-| `TOKEN_SERVER_ENV`                       | Set to `production` for shared evaluation and production-like deployments.                        |
-| `TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG` | Enables production readiness checks without changing `TOKEN_SERVER_ENV`.                          |
-| `TOKEN_SERVER_ALLOWED_ORIGINS`           | Comma-separated browser origins accepted by CORS. Required for production readiness.              |
-| `OLLAMA_MODEL`                           | Model name used by helper `/compile-encounter` when Ollama is available.                          |
-| `DRAFT_STORE_PATH`                       | Local JSONL draft queue path.                                                                     |
-| `RECORDING_MANIFEST_PATH`                | Local JSONL recording consent manifest path.                                                      |
-| `AUDIT_LOG_PATH`                         | Draft lifecycle audit JSONL path.                                                                 |
-| `AUDIT_HASH_SALT`                        | Site-managed salt for hashed patient references in audit events.                                  |
+| Variable                                 | Use                                                                                                                                            |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`  | LiveKit token signing. Missing values fall back to LiveKit dev defaults only in development mode.                                              |
+| `LIVEKIT_HTTP_URL`                       | Optional LiveKit HTTP API URL for best-effort room metadata sync.                                                                              |
+| `LIVEKIT_ROOM_PREFIX`                    | Room prefix shared by frontend, helper, and agent.                                                                                             |
+| `TOKEN_SERVER_ENV`                       | Set to `production` for shared evaluation and production-like deployments.                                                                     |
+| `TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG` | Enables production readiness checks without changing `TOKEN_SERVER_ENV`.                                                                       |
+| `TOKEN_SERVER_REQUIRE_OPENMRS_SESSION`   | Requires protected helper endpoints to validate the caller's OpenMRS session cookie or Authorization header. Required by production readiness. |
+| `TOKEN_SERVER_ALLOWED_ORIGINS`           | Comma-separated browser origins accepted by CORS. Required for production readiness.                                                           |
+| `OLLAMA_MODEL`                           | Model name used by helper `/compile-encounter` when Ollama is available.                                                                       |
+| `DRAFT_STORE_PATH`                       | Local JSONL draft queue path.                                                                                                                  |
+| `RECORDING_MANIFEST_PATH`                | Local JSONL recording consent manifest path.                                                                                                   |
+| `AUDIT_LOG_PATH`                         | Draft lifecycle audit JSONL path.                                                                                                              |
+| `AUDIT_HASH_SALT`                        | Site-managed salt for hashed patient references in audit events.                                                                               |
 
 Optional OpenMRS write configuration:
 
@@ -258,6 +263,11 @@ Draft lifecycle audit event types:
 - `draft_saved`: OpenMRS accepted the encounter create request.
 - `draft_write_rejected`: an OpenMRS write was requested but blocked or rejected
   by configuration, authentication, patient lookup, or the OpenMRS REST API.
+
+Audit events intentionally do not store raw transcript or draft text. The local
+draft queue stores the redacted transcript and clinician-reviewable draft so the
+UI can recover queued work; treat `DRAFT_STORE_PATH` as clinical data even after
+redaction.
 
 ## OpenMRS Base Deployment
 
@@ -319,7 +329,7 @@ Verify:
 
 ```bash
 docker compose ps
-curl http://localhost:7890/health
+curl http://<openmrs-host>/openmrs/livekit/health
 docker logs openmrs-distro-referenceapplication-livekit-helper-1
 docker logs openmrs-distro-referenceapplication-livekit-agent-cpu-1
 ```
@@ -420,11 +430,13 @@ Required preflight checks:
 
 1. OpenMRS is served over HTTPS, or every service is localhost-only.
 2. `livekitServerUrl` is `wss://` for shared environments.
-3. `tokenEndpoint` is `https://` for shared environments.
+3. `tokenEndpoint` is same-origin `/openmrs/livekit/token` or `https://` for
+   shared environments.
 4. Helper runs with `TOKEN_SERVER_ENV=production` or
    `TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG=true` for shared evaluations.
-5. Helper `/health` shows configured LiveKit token signing and a non-permissive
-   CORS allowlist for the OpenMRS browser origin.
+5. Helper `/health` shows configured LiveKit token signing, enforced OpenMRS
+   session validation, and a non-permissive CORS allowlist for the OpenMRS
+   browser origin.
 6. Frontend `roomPrefix`, helper `LIVEKIT_ROOM_PREFIX`, and agent
    `LIVEKIT_ROOM_PREFIX` match exactly.
 7. Agent process is running with the intended STT, LLM, and TTS providers.
@@ -480,8 +492,9 @@ docker logs -f openmrs-distro-referenceapplication-backend-1
 
 Useful signals:
 
-- Gateway: static microfrontend chunks, `/livekit/token`, `/livekit/health`, and
-  OpenMRS REST/FHIR status codes.
+- Gateway: static microfrontend chunks, `/openmrs/livekit/token`,
+  `/openmrs/livekit/health`, compatibility `/livekit/*` routes, and OpenMRS
+  REST/FHIR status codes.
 - Helper: token, health, synthetic consultation, compile, and draft queue
   requests.
 - LiveKit: browser participant joins, agent assignment, ICE/UDP connection type,

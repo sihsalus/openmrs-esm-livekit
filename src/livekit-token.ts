@@ -75,6 +75,15 @@ export interface OpenmrsDraftResult {
   message?: string;
 }
 
+export function buildQueuedOpenmrsDraftPayload(
+  payload: Omit<OpenmrsDraftPayload, 'writeToOpenmrs'>,
+): OpenmrsDraftPayload {
+  return {
+    ...payload,
+    writeToOpenmrs: false,
+  };
+}
+
 export async function saveOpenmrsDraft(
   tokenEndpoint: string,
   payload: OpenmrsDraftPayload,

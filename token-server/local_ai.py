@@ -269,7 +269,10 @@ def _agent_provider_capability(provider: str, agent: dict[str, Any], contract: s
 
 
 def compile_encounter(body: dict[str, Any]) -> dict[str, Any]:
-    transcript = str(body.get("transcript") or body.get("text") or DEMO_TRANSCRIPT).strip()
+    transcript = str(body.get("transcript") or body.get("text") or "").strip()
+    if not transcript:
+        raise ValueError("Missing transcript or text")
+
     names = [body.get("patientName"), body.get("clinicianName"), body.get("doctorName")]
     redacted_transcript = redact_phi(transcript, names)
     warnings: list[str] = []

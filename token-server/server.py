@@ -71,6 +71,7 @@ API_KEY = os.environ.get("LIVEKIT_API_KEY", DEFAULT_DEV_API_KEY)
 API_SECRET = os.environ.get("LIVEKIT_API_SECRET", DEFAULT_DEV_API_SECRET)
 PORT = int(os.environ.get("TOKEN_SERVER_PORT", "7890"))
 ROOM_PREFIX = os.environ.get("LIVEKIT_ROOM_PREFIX", "openmrs-voice-")
+OPENMRS_BASE_URL = os.environ.get("OPENMRS_BASE_URL", "http://127.0.0.1/openmrs").strip().rstrip("/")
 LIVEKIT_HTTP_URL = os.environ.get("LIVEKIT_HTTP_URL", "").strip().rstrip("/")
 LIVEKIT_ROOM_METADATA_TIMEOUT_SECONDS = float(
     os.environ.get("LIVEKIT_ROOM_METADATA_TIMEOUT_SECONDS", "2")
@@ -82,6 +83,17 @@ REQUIRE_PRODUCTION_CONFIG = TOKEN_SERVER_ENV in PRODUCTION_ENVIRONMENTS or env_f
 ALLOWED_ORIGINS = parse_allowed_origins(
     os.environ.get("TOKEN_SERVER_ALLOWED_ORIGINS") or os.environ.get("CORS_ALLOWED_ORIGINS") or ""
 )
+TOKEN_SERVER_REQUIRE_OPENMRS_SESSION = env_flag("TOKEN_SERVER_REQUIRE_OPENMRS_SESSION")
+OPENMRS_SESSION_AUTH_PATHS = {
+    "/token",
+    "/openmrs/draft",
+    "/compile-encounter",
+    "/recording/session",
+    "/synthetic-consultation",
+    "/translate",
+    "/stt",
+    "/tts",
+}
 
 
 def create_token(
@@ -146,6 +158,8 @@ class TokenHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self._path()
+        if self._requires_openmrs_session(path) and not self._require_openmrs_session():
+            return
 
         if path == "/token":
             self._handle_token()
@@ -154,6 +168,8 @@ class TokenHandler(BaseHTTPRequestHandler):
         if path == "/openmrs/draft":
             try:
                 self._send_json(queue_openmrs_draft(self._read_json(), self._request_context()))
+            except ValueError as error:
+                self._send_json({"status": "error", "error": str(error)}, status=400)
             except Exception as error:
                 self._send_json({"status": "error", "error": str(error)}, status=500)
             return
@@ -173,6 +189,8 @@ class TokenHandler(BaseHTTPRequestHandler):
 
         try:
             self._send_json(handler(self._read_json()))
+        except ValueError as error:
+            self._send_json({"status": "error", "error": str(error)}, status=400)
         except Exception as error:
             self._send_json({"status": "error", "error": str(error)}, status=500)
 
@@ -234,6 +252,71 @@ class TokenHandler(BaseHTTPRequestHandler):
         self._send_json(
             {"token": token, "roomName": room_name, "roomMetadata": metadata_result}
         )
+
+    def _requires_openmrs_session(self, path: str) -> bool:
+        return TOKEN_SERVER_REQUIRE_OPENMRS_SESSION and path in OPENMRS_SESSION_AUTH_PATHS
+
+    def _require_openmrs_session(self) -> bool:
+        headers = {}
+        if self.headers.get("Authorization"):
+            headers["Authorization"] = self.headers["Authorization"]
+        if self.headers.get("Cookie"):
+            headers["Cookie"] = self.headers["Cookie"]
+
+        if not headers:
+            self._send_json(
+                {
+                    "status": "error",
+                    "code": "openmrs_session_required",
+                    "error": "OpenMRS session credentials are required",
+                },
+                status=401,
+            )
+            return False
+
+        request = urllib_request.Request(
+            f"{OPENMRS_BASE_URL}/ws/rest/v1/session",
+            headers=headers,
+            method="GET",
+        )
+        try:
+            with urllib_request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib_error.HTTPError as error:
+            status = 401 if error.code in {401, 403} else 503
+            code = "openmrs_session_required" if status == 401 else "openmrs_session_unavailable"
+            self._send_json(
+                {
+                    "status": "error",
+                    "code": code,
+                    "error": f"OpenMRS rejected session validation with HTTP {error.code}",
+                },
+                status=status,
+            )
+            return False
+        except (urllib_error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            self._send_json(
+                {
+                    "status": "error",
+                    "code": "openmrs_session_unavailable",
+                    "error": f"Could not validate OpenMRS session: {type(error).__name__}",
+                },
+                status=503,
+            )
+            return False
+
+        if isinstance(payload, dict) and payload.get("authenticated") is True:
+            return True
+
+        self._send_json(
+            {
+                "status": "error",
+                "code": "openmrs_session_required",
+                "error": "OpenMRS session is not authenticated",
+            },
+            status=401,
+        )
+        return False
 
     def _path(self):
         return self.path.split("?", 1)[0]
@@ -424,11 +507,21 @@ def build_token_server_health() -> dict:
     services = payload.setdefault("services", {})
     services["livekitTokenSigning"] = livekit_token_signing_status()
     services["livekitRoomMetadata"] = livekit_room_metadata_status()
+    services["tokenServerAuth"] = token_server_auth_status()
     services["cors"] = cors_status()
     services["productionReadiness"] = production_readiness_status()
     for warning in token_server_warnings():
         payload.setdefault("warnings", []).append(warning)
     return payload
+
+
+def token_server_auth_status() -> dict:
+    return {
+        "status": "enforced" if TOKEN_SERVER_REQUIRE_OPENMRS_SESSION else "disabled",
+        "openmrsSessionRequired": TOKEN_SERVER_REQUIRE_OPENMRS_SESSION,
+        "protectedPaths": sorted(OPENMRS_SESSION_AUTH_PATHS),
+        "contract": "When enabled, protected helper endpoints require an authenticated OpenMRS session via Cookie or Authorization header.",
+    }
 
 
 def livekit_token_signing_status() -> dict:
@@ -511,6 +604,9 @@ def production_config_errors() -> list[str]:
     if not ALLOWED_ORIGINS:
         errors.append("TOKEN_SERVER_ALLOWED_ORIGINS must include the OpenMRS browser origin")
 
+    if not TOKEN_SERVER_REQUIRE_OPENMRS_SESSION:
+        errors.append("TOKEN_SERVER_REQUIRE_OPENMRS_SESSION=true is required")
+
     insecure_origins = [origin for origin in ALLOWED_ORIGINS if not is_secure_shared_origin(origin)]
     if insecure_origins:
         errors.append(
@@ -543,6 +639,10 @@ def token_server_warnings() -> list[str]:
     if not ALLOWED_ORIGINS and not REQUIRE_PRODUCTION_CONFIG:
         warnings.append(
             "CORS is permissive for demo mode. Set TOKEN_SERVER_ALLOWED_ORIGINS before any shared or production deployment."
+        )
+    if not TOKEN_SERVER_REQUIRE_OPENMRS_SESSION and not REQUIRE_PRODUCTION_CONFIG:
+        warnings.append(
+            "OpenMRS session validation is disabled for demo mode. Set TOKEN_SERVER_REQUIRE_OPENMRS_SESSION=true before any shared or production deployment."
         )
     return warnings
 

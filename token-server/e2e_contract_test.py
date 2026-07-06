@@ -173,12 +173,24 @@ def start_server(handler: type[BaseHTTPRequestHandler]) -> tuple[ThreadingHTTPSe
     return server, f"http://127.0.0.1:{port}"
 
 
-def request_json(base_url: str, path: str, payload: dict[str, Any] | None = None, headers: dict[str, str] | None = None):
+DEFAULT_AUTH_HEADER = "Basic " + base64.b64encode(b"admin:Admin123").decode("ascii")
+
+
+def request_json(
+    base_url: str,
+    path: str,
+    payload: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    authenticated: bool = True,
+):
     data = None if payload is None else json.dumps(payload).encode("utf-8")
+    request_headers = {"Content-Type": "application/json", **(headers or {})}
+    if authenticated and "Authorization" not in request_headers:
+        request_headers["Authorization"] = DEFAULT_AUTH_HEADER
     request = urllib.request.Request(
         f"{base_url}{path}",
         data=data,
-        headers={"Content-Type": "application/json", **(headers or {})},
+        headers=request_headers,
         method="POST" if payload is not None else "GET",
     )
     with urllib.request.urlopen(request, timeout=10) as response:
@@ -236,6 +248,7 @@ class TokenServerE2ETest(unittest.TestCase):
             {
                 "TOKEN_SERVER_PORT": str(cls.port),
                 "TOKEN_SERVER_ENV": "production",
+                "TOKEN_SERVER_REQUIRE_OPENMRS_SESSION": "true",
                 "TOKEN_SERVER_ALLOWED_ORIGINS": "https://openmrs.test",
                 "LIVEKIT_API_KEY": "test-key",
                 "LIVEKIT_API_SECRET": "test-secret",
@@ -307,6 +320,8 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["services"]["livekitTokenSigning"]["status"], "configured")
         self.assertEqual(payload["services"]["livekitRoomMetadata"]["status"], "configured")
+        self.assertEqual(payload["services"]["tokenServerAuth"]["status"], "enforced")
+        self.assertTrue(payload["services"]["tokenServerAuth"]["openmrsSessionRequired"])
         self.assertEqual(payload["services"]["cors"]["status"], "configured")
         self.assertEqual(payload["services"]["cors"]["allowedOrigins"], ["https://openmrs.test"])
         self.assertEqual(payload["services"]["productionReadiness"]["status"], "enforced")
@@ -333,6 +348,32 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["services"]["localStorage"]["status"], "private_files")
         self.assertEqual(payload["services"]["localStorage"]["fileMode"], "0600")
         self.assertTrue(payload["services"]["localStorage"]["auditLogPath"].endswith("audit.jsonl"))
+
+    def test_token_requires_authenticated_openmrs_session_when_enabled(self):
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(
+                self.base_url,
+                "/token",
+                {"patientUuid": "patient-uuid", "roomPrefix": "openmrs-room-"},
+                authenticated=False,
+            )
+
+        self.assertEqual(context.exception.code, 401)
+        payload = json.loads(context.exception.read().decode("utf-8"))
+        self.assertEqual(payload["code"], "openmrs_session_required")
+
+    def test_synthetic_consultation_requires_authenticated_openmrs_session_when_enabled(self):
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(
+                self.base_url,
+                "/synthetic-consultation",
+                {"caseId": "pediatric-respiratory"},
+                authenticated=False,
+            )
+
+        self.assertEqual(context.exception.code, 401)
+        payload = json.loads(context.exception.read().decode("utf-8"))
+        self.assertEqual(payload["code"], "openmrs_session_required")
 
     def test_openmrs_probe_treats_login_html_as_reachable(self):
         server, base_url = start_server(FakeOpenMRSLoginHandler)
@@ -485,6 +526,15 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertNotIn("5 de julio de 2026", payload["redactedTranscript"])
         self.assertEqual(payload["draft"]["symptoms"], ["cough", "fever"])
 
+    def test_compile_encounter_requires_transcript(self):
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(self.base_url, "/compile-encounter", {"patientName": "Sofia Demo"})
+
+        self.assertEqual(context.exception.code, 400)
+        payload = json.loads(context.exception.read().decode("utf-8"))
+        self.assertEqual(payload["status"], "error")
+        self.assertIn("Missing transcript or text", payload["error"])
+
     def test_synthetic_consultation_generates_safe_draft_request(self):
         payload, _response = request_json(
             self.base_url,
@@ -617,7 +667,7 @@ class TokenServerE2ETest(unittest.TestCase):
         request = urllib.request.Request(
             f"{self.base_url}/token",
             data=b"{not-json",
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "Authorization": DEFAULT_AUTH_HEADER},
             method="POST",
         )
 
@@ -647,12 +697,14 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertIn("Production readiness check failed", output)
         self.assertIn("LIVEKIT_API_KEY and LIVEKIT_API_SECRET", output)
         self.assertIn("TOKEN_SERVER_ALLOWED_ORIGINS", output)
+        self.assertIn("TOKEN_SERVER_REQUIRE_OPENMRS_SESSION", output)
 
     def test_production_mode_rejects_livekit_dev_defaults(self):
         returncode, output = run_token_server_startup(
             {
                 "TOKEN_SERVER_PORT": str(free_port()),
                 "TOKEN_SERVER_ENV": "production",
+                "TOKEN_SERVER_REQUIRE_OPENMRS_SESSION": "true",
                 "TOKEN_SERVER_ALLOWED_ORIGINS": "https://openmrs.test",
                 "LIVEKIT_API_KEY": "devkey",
                 "LIVEKIT_API_SECRET": "secret",

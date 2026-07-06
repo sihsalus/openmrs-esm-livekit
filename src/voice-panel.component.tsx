@@ -22,6 +22,7 @@ import {
 import { useConfig, usePatient } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
 import {
+  buildQueuedOpenmrsDraftPayload,
   fetchLivekitToken,
   resolveLivekitServerUrl,
   resolveTokenEndpoint,
@@ -186,6 +187,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   const tokenEndpoint = useMemo(() => resolveTokenEndpoint(config.tokenEndpoint), [config.tokenEndpoint]);
   const tokenEndpointDisplay = useMemo(() => formatEndpointForDisplay(tokenEndpoint), [tokenEndpoint]);
   const roomPrefix = config.roomPrefix || 'openmrs-voice-';
+  const demoFlowEnabled = Boolean(config.enableDemoFlow);
   const [token, setToken] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -428,6 +430,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
         doctorLanguage={doctorLanguage}
         patientLanguage={patientLanguage}
         agentVoiceLanguage={agentVoiceLanguage}
+        demoFlowEnabled={demoFlowEnabled}
       />
     </LiveKitRoom>
   );
@@ -447,6 +450,7 @@ interface ActiveSessionProps {
   doctorLanguage: LanguageCode;
   patientLanguage: LanguageCode;
   agentVoiceLanguage: LanguageCode;
+  demoFlowEnabled: boolean;
 }
 
 const ActiveSession: React.FC<ActiveSessionProps> = ({
@@ -459,6 +463,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   doctorLanguage,
   patientLanguage,
   agentVoiceLanguage,
+  demoFlowEnabled,
 }) => {
   const { t } = useTranslation();
   const connectionState = useConnectionState();
@@ -650,7 +655,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   );
 
   const runDemoConversation = useCallback(async () => {
-    if (demoRunning) return;
+    if (!demoFlowEnabled || demoRunning) return;
     setDemoRunning(true);
     setRedactedTranscript('');
     setDraft(null);
@@ -668,7 +673,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     await runStep('openmrsDraft', 2000);
     setDraft(cloneEncounterDraft(DEMO_CONVERSATIONS[doctorLanguage].draft));
     setDemoRunning(false);
-  }, [demoRunning, doctorLanguage, patientLanguage, runStep, t]);
+  }, [demoFlowEnabled, demoRunning, doctorLanguage, patientLanguage, runStep, t]);
 
   const resetFlow = useCallback(() => {
     timeouts.current.forEach((id) => window.clearTimeout(id));
@@ -692,12 +697,14 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     setDraftSaveError(null);
     setDraftSaveMessage(null);
     try {
-      const result = await saveOpenmrsDraft(tokenEndpoint, {
-        patientUuid,
-        draft,
-        redactedTranscript: redactedTranscript || liveTranscriptText,
-        writeToOpenmrs: true,
-      });
+      const result = await saveOpenmrsDraft(
+        tokenEndpoint,
+        buildQueuedOpenmrsDraftPayload({
+          patientUuid,
+          draft,
+          redactedTranscript: redactedTranscript || liveTranscriptText,
+        }),
+      );
       setDraftSaved(true);
       setDraftSaveMessage(result.message || t('queuedForReview', 'Queued for clinician review'));
     } catch (err) {
@@ -831,15 +838,17 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           onClick={toggleMute}
           disabled={!microphoneAvailable}
         />
-        <Button
-          kind="primary"
-          size="md"
-          renderIcon={Play}
-          onClick={runDemoConversation}
-          disabled={demoRunning}
-        >
-          {demoRunning ? t('demoRunning', 'Running demo...') : t('runDemo', 'Run demo conversation')}
-        </Button>
+        {demoFlowEnabled && (
+          <Button
+            kind="primary"
+            size="md"
+            renderIcon={Play}
+            onClick={runDemoConversation}
+            disabled={demoRunning}
+          >
+            {demoRunning ? t('demoRunning', 'Running demo...') : t('runDemo', 'Run demo conversation')}
+          </Button>
+        )}
         <Button
           kind="danger--ghost"
           size="lg"
@@ -856,15 +865,19 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           <div>
             <strong>{t('agentNotResponding', 'Agent not publishing data')}</strong>
             <p>
-              {t(
-                'agentNotRespondingDetail',
-                'Start the OpenMRS LiveKit agent for this room, or run the local demo flow while the room stays connected.',
-              )}
+              {demoFlowEnabled
+                ? t(
+                    'agentNotRespondingDetailWithDemo',
+                    'Start the OpenMRS LiveKit agent for this room, or run the local demo flow while the room stays connected.',
+                  )
+                : t('agentNotRespondingDetail', 'Start or restart the OpenMRS LiveKit agent for this room.')}
             </p>
           </div>
-          <Button kind="tertiary" size="sm" renderIcon={Play} onClick={runDemoConversation}>
-            {t('runDemo', 'Run demo conversation')}
-          </Button>
+          {demoFlowEnabled && (
+            <Button kind="tertiary" size="sm" renderIcon={Play} onClick={runDemoConversation}>
+              {t('runDemo', 'Run demo conversation')}
+            </Button>
+          )}
         </div>
       )}
 
@@ -962,7 +975,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                   onClick={saveDraft}
                   disabled={draftSaving || !patientUuid}
                 >
-                  {draftSaving ? t('savingDraft', 'Saving draft...') : t('saveDraft', 'Queue / save draft')}
+                  {draftSaving ? t('savingDraft', 'Saving draft...') : t('queueDraft', 'Queue draft')}
                 </Button>
               )}
             </div>
@@ -1155,6 +1168,14 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                     label={t('productionGate', 'Production gate')}
                     status={health.productionReadiness}
                     detail={t('productionGateDetail', 'Rejects unsafe shared deployment config')}
+                  />
+                  <HealthRow
+                    label={t('tokenServerAuth', 'Token server auth')}
+                    status={health.tokenServerAuth}
+                    detail={t(
+                      'tokenServerAuthDetail',
+                      'Requires an authenticated OpenMRS session when enforced',
+                    )}
                   />
                   <HealthRow
                     label="CORS"

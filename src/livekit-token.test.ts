@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildQueuedOpenmrsDraftPayload,
   buildRoomName,
   fetchLivekitToken,
   resolveLivekitServerUrl,
@@ -45,10 +46,33 @@ describe('LiveKit token endpoint transport', () => {
     expect(resolveTokenServerPath('https://openmrs.example:7890/token', '/health')).toBe(
       'https://openmrs.example:7890/health',
     );
+    expect(resolveTokenServerPath('/openmrs/livekit/token', '/openmrs/draft')).toBe(
+      'https://openmrs.example/openmrs/livekit/openmrs/draft',
+    );
   });
 
   it('uses a clinical OpenMRS room prefix when none is configured', () => {
     expect(buildRoomName('patient/uuid', '')).toBe('openmrs-voice-patient-uuid');
+  });
+
+  it('builds queued draft payloads without requesting an OpenMRS write', () => {
+    expect(
+      buildQueuedOpenmrsDraftPayload({
+        patientUuid: 'patient-123',
+        draft: {
+          chiefComplaint: 'Cough',
+          symptoms: ['cough'],
+          medicationsMentioned: [],
+          allergiesMentioned: [],
+          assessmentNotes: 'Review required.',
+          patientInstructions: 'Return if symptoms worsen.',
+        },
+        redactedTranscript: 'Doctor: cough',
+      }),
+    ).toMatchObject({
+      patientUuid: 'patient-123',
+      writeToOpenmrs: false,
+    });
   });
 
   it('sends selected clinical languages when requesting a room token', async () => {
@@ -69,6 +93,7 @@ describe('LiveKit token endpoint transport', () => {
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const requestBody = JSON.parse(init.body as string);
+    expect(init.credentials).toBe('include');
     expect(requestBody).toEqual({
       patientUuid: 'patient-123',
       roomName: 'openmrs-voice-patient-123',
@@ -162,6 +187,9 @@ describe('LiveKit token endpoint transport', () => {
     ).rejects.toThrow(
       'Draft save failed: 409 Conflict - openmrs_draft_config_missing: OPENMRS_ENCOUNTER_TYPE_UUID is required',
     );
+
+    const [, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(init.credentials).toBe('include');
   });
 });
 

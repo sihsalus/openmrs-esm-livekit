@@ -4,11 +4,17 @@ Local helper service for OpenMRS LiveKit. It keeps the existing LiveKit token
 endpoint and exposes local AI contracts for validation and self-hosted
 deployments.
 
-Default base URL on the PowerEdge:
+Default gateway URL on the PowerEdge:
 
 ```text
-http://100.120.80.60:7890
+https://sihsalus-main-server.allosaurus-squeaker.ts.net/openmrs/livekit
 ```
+
+The helper still listens on container port `7890`, but the OpenMRS base compose
+file exposes it only to the internal Docker network. Browser traffic should go
+through the OpenMRS gateway. Base deployments place the browser token endpoint
+under `/openmrs/livekit/token` so OpenMRS session cookies scoped to `/openmrs`
+can be forwarded to the helper when `TOKEN_SERVER_REQUIRE_OPENMRS_SESSION=true`.
 
 ## Endpoints
 
@@ -42,6 +48,8 @@ are populated from `LIVEKIT_AGENT_STT_PROVIDER`,
 `stt` and `tts` fields summarize the real-time agent capability; `helperStt`
 and `helperTts` summarize the optional helper endpoints.
 `services.livekitTokenSigning` reports whether `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` are configured.
+`services.tokenServerAuth` reports whether protected helper endpoints require
+an authenticated OpenMRS session.
 `services.cors` reports whether browser origins are allowlisted, and
 `services.productionReadiness` reports whether production checks are enforced.
 `services.draftAudit` reports the local draft lifecycle audit log contract.
@@ -61,9 +69,10 @@ The helper provides local contracts that support validation and smoke tests:
 - `/compile-encounter` local drafting.
 - OpenMRS draft queue/write bridge.
 
-`/compile-encounter` uses local Ollama when available and falls back to
-deterministic heuristics. Its model is selected with `OLLAMA_MODEL`; examples
-use `medgemma:latest`, while the agent's local-first CPU default uses `qwen2.5:1.5b`.
+`/compile-encounter` requires a `transcript` or `text` field. It uses local
+Ollama when available and falls back to deterministic heuristics. Its model is
+selected with `OLLAMA_MODEL`; examples use `medgemma:latest`, while the agent's
+local-first CPU default uses `qwen2.5:1.5b`.
 The frontend and helper do not embed model secrets in browser code.
 
 ## Production readiness gate
@@ -84,11 +93,12 @@ are configured:
 LIVEKIT_API_KEY=<site-livekit-api-key>
 LIVEKIT_API_SECRET=<site-livekit-api-secret>
 TOKEN_SERVER_ALLOWED_ORIGINS=https://openmrs.example.org
+TOKEN_SERVER_REQUIRE_OPENMRS_SESSION=true
 ```
 
 Production mode rejects missing LiveKit credentials, LiveKit development
-defaults (`devkey` / `secret`), missing CORS allowlists, and non-HTTPS
-allowlisted origins except localhost/loopback.
+defaults (`devkey` / `secret`), missing OpenMRS session validation, missing CORS
+allowlists, and non-HTTPS allowlisted origins except localhost/loopback.
 
 In development mode, CORS remains permissive for local development but `/health`
 returns a warning until `TOKEN_SERVER_ALLOWED_ORIGINS` is configured.
@@ -199,7 +209,7 @@ continue while logs expose the missing metadata path.
 
 ### POST /compile-encounter
 
-Redacts PHI and compiles a clinician-reviewable OpenMRS draft. Uses local Ollama when available and falls back to deterministic heuristics.
+Redacts PHI and compiles a clinician-reviewable OpenMRS draft. Uses local Ollama when available and falls back to deterministic heuristics. Requests without `transcript` or `text` return `400`.
 
 Request:
 
@@ -327,8 +337,10 @@ OPENMRS_BASIC_AUTH=<base64-user-password-or-full-Basic-header>
 
 For browser session forwarding, call the helper with `credentials: 'include'`. The helper accepts the OpenMRS session cookie and validates it against `GET /openmrs/ws/rest/v1/session` before attempting `POST /openmrs/ws/rest/v1/encounter`.
 
-Queued drafts are stored in `/tmp/openmrs-livekit-drafts.jsonl`. Draft lifecycle
-audit events are stored in `/tmp/openmrs-livekit-audit.jsonl` by default.
+Queued drafts are stored in `/tmp/openmrs-livekit-drafts.jsonl`. They include
+the redacted transcript and clinician-reviewable draft. Draft lifecycle audit
+events are stored in `/tmp/openmrs-livekit-audit.jsonl` by default and do not
+include transcript or draft text.
 
 Audit event types:
 
