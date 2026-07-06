@@ -5,6 +5,8 @@
   "connecting": "Connecting...",
   "connected": "Connected",
   "recording": "Recording",
+  "microphone": "Microphone",
+  "muted": "Muted",
   "disconnected": "Disconnected",
   "mute": "Mute",
   "unmute": "Unmute",
