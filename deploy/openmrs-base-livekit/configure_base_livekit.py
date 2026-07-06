@@ -29,7 +29,7 @@ def update_frontend() -> None:
     config["@sihsalus/esm-livekit-app"] = {
         "livekitServerUrl": FRONTEND_LIVEKIT_SERVER_URL,
         "tokenEndpoint": "/livekit/token",
-        "roomPrefix": "iot-device-",
+        "roomPrefix": "openmrs-voice-",
     }
     config_path.write_text(json.dumps(config, indent=2) + "\n")
 

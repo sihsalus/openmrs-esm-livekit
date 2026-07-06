@@ -146,7 +146,7 @@ Expected result:
 - Agent logs `Metadata parsed` when LiveKit room metadata is available.
 - Agent may log `Room metadata derived from room name` as a non-blocking
   fallback for rooms named with the configured prefix, for example
-  `iot-device-<patientUuid>`.
+  `openmrs-voice-<patientUuid>`.
 - `Room metadata empty` should only appear for rooms that do not match the
   configured agent room prefix or cannot expose a patient UUID safely.
 
