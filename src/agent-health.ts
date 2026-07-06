@@ -77,6 +77,10 @@ export function serviceHealthToStatus(status: unknown): ServiceStatus {
   return 'pending';
 }
 
+export function resolveEmbeddedCapabilityStatus(capability: ServiceStatus, agent: ServiceStatus): ServiceStatus {
+  return capability === 'pending' && agent === 'ok' ? 'ok' : capability;
+}
+
 function serviceStatus(service: unknown): unknown {
   return isRecord(service) ? service.status : undefined;
 }

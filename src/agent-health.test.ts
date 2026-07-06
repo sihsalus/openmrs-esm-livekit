@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeTokenServerHealth, serviceHealthToStatus } from './agent-health';
+import {
+  normalizeTokenServerHealth,
+  resolveEmbeddedCapabilityStatus,
+  serviceHealthToStatus,
+} from './agent-health';
 
 describe('agent health normalization', () => {
   it('maps helper service statuses into frontend status tags', () => {
@@ -87,5 +91,12 @@ describe('agent health normalization', () => {
   it('rejects malformed health payloads', () => {
     expect(normalizeTokenServerHealth(null)).toBeNull();
     expect(normalizeTokenServerHealth({})).toBeNull();
+  });
+
+  it('reports embedded STT and TTS capabilities as active when the agent is healthy', () => {
+    expect(resolveEmbeddedCapabilityStatus('pending', 'ok')).toBe('ok');
+    expect(resolveEmbeddedCapabilityStatus('pending', 'checking')).toBe('pending');
+    expect(resolveEmbeddedCapabilityStatus('error', 'ok')).toBe('error');
+    expect(resolveEmbeddedCapabilityStatus('ok', 'pending')).toBe('ok');
   });
 });
