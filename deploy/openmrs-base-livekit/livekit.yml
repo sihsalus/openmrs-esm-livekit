@@ -26,7 +26,7 @@ services:
       - ollama-data:/root/.ollama
 
   livekit-helper:
-    image: ${OPENMRS_LIVEKIT_HELPER_IMAGE:-openmrs-base-livekit-helper:0.1.23}
+    image: ${OPENMRS_LIVEKIT_HELPER_IMAGE:-openmrs-base-livekit-helper:0.1.24}
     build:
       context: ${OPENMRS_ESM_LIVEKIT_PATH:?OPENMRS_ESM_LIVEKIT_PATH is required}
       dockerfile: ${OPENMRS_DISTRO_ROOT:?OPENMRS_DISTRO_ROOT is required}/deploy/livekit/token-server.Dockerfile
