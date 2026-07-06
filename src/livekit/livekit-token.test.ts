@@ -4,6 +4,8 @@ import {
   buildQueuedOpenmrsDraftPayload,
   buildRoomName,
   fetchLivekitToken,
+  fetchOpenmrsDraftAudit,
+  fetchOpenmrsDraftWriteConfig,
   resolveLivekitServerUrl,
   resolveTokenEndpoint,
   resolveTokenServerPath,
@@ -242,6 +244,65 @@ describe('LiveKit token endpoint transport', () => {
 
     const [, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
     expect(init.credentials).toBe('include');
+  });
+
+  it('fetches OpenMRS draft write configuration from the helper gateway path', async () => {
+    stubBrowserLocation('https://openmrs.example/spa/home');
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          status: 'validated',
+          enabled: true,
+          resources: {
+            encounterType: { status: 'ok', uuid: 'encounter-type-uuid', display: 'Visit Note' },
+          },
+        },
+        200,
+        'OK',
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchOpenmrsDraftWriteConfig('/openmrs/livekit/token')).resolves.toMatchObject({
+      status: 'validated',
+      enabled: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://openmrs.example/openmrs/livekit/openmrs/draft/config',
+      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+    );
+  });
+
+  it('fetches sanitized OpenMRS draft audit events with a bounded limit', async () => {
+    stubBrowserLocation('https://openmrs.example/spa/home');
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          status: 'ok',
+          events: [
+            {
+              eventType: 'draft_write_rejected',
+              openmrsWrite: 'visit_required',
+              rawClinicalTextStored: false,
+            },
+          ],
+        },
+        200,
+        'OK',
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchOpenmrsDraftAudit('/openmrs/livekit/token', 10)).resolves.toMatchObject({
+      status: 'ok',
+      events: [{ eventType: 'draft_write_rejected' }],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://openmrs.example/openmrs/livekit/openmrs/draft/audit?limit=10',
+      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+    );
   });
 });
 

@@ -11,6 +11,13 @@ import {
   PatientSummary,
 } from './patient-context';
 
+type PatientContextGroupKey = 'conditions' | 'allergies' | 'medications';
+
+interface FhirListResult {
+  entries: FhirEntry[];
+  failed: boolean;
+}
+
 const PatientContext: React.FC = () => {
   const { t } = useTranslation();
   const { patient, isLoading: patientLoading } = usePatient();
@@ -40,12 +47,18 @@ const PatientContext: React.FC = () => {
     ])
       .then(([conditions, allergies, medications]) => {
         if (cancelled) return;
-        setSummary(buildPatientSummary(conditions, allergies, medications));
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSummary({ conditions: [], allergies: [], medications: [] });
+        const nextSummary = buildPatientSummary(conditions.entries, allergies.entries, medications.entries);
+        const unavailable: PatientContextGroupKey[] = [];
+        if (conditions.failed) {
+          unavailable.push('conditions');
         }
+        if (allergies.failed) {
+          unavailable.push('allergies');
+        }
+        if (medications.failed) {
+          unavailable.push('medications');
+        }
+        setSummary({ ...nextSummary, unavailable });
       })
       .finally(() => {
         if (!cancelled) {
@@ -71,8 +84,12 @@ const PatientContext: React.FC = () => {
   if (!summary) return null;
 
   const patientName = demographics.name || t('unknownPatient', 'Unknown patient');
+  const unavailable = new Set(summary.unavailable ?? []);
   const isEmpty =
-    summary.conditions.length === 0 && summary.allergies.length === 0 && summary.medications.length === 0;
+    summary.conditions.length === 0 &&
+    summary.allergies.length === 0 &&
+    summary.medications.length === 0 &&
+    unavailable.size === 0;
 
   return (
     <Tile className={styles.contextCard}>
@@ -119,18 +136,24 @@ const PatientContext: React.FC = () => {
             items={summary.conditions}
             tagType="red"
             emptyLabel={t('noneOnFile', 'None on file')}
+            unavailable={unavailable.has('conditions')}
+            unavailableLabel={t('unableToLoad', 'Unable to load')}
           />
           <ContextGroup
             label={t('knownAllergies', 'Known allergies')}
             items={summary.allergies}
             tagType="magenta"
             emptyLabel={t('nkda', 'NKDA')}
+            unavailable={unavailable.has('allergies')}
+            unavailableLabel={t('unableToLoad', 'Unable to load')}
           />
           <ContextGroup
             label={t('activeMedications', 'Active medications')}
             items={summary.medications}
             tagType="teal"
             emptyLabel={t('noneOnFile', 'None on file')}
+            unavailable={unavailable.has('medications')}
+            unavailableLabel={t('unableToLoad', 'Unable to load')}
           />
         </div>
       )}
@@ -143,11 +166,17 @@ const ContextGroup: React.FC<{
   items: string[];
   tagType: string;
   emptyLabel: string;
-}> = ({ label, items, tagType, emptyLabel }) => (
+  unavailable?: boolean;
+  unavailableLabel: string;
+}> = ({ label, items, tagType, emptyLabel, unavailable, unavailableLabel }) => (
   <div className={styles.contextGroup}>
     <span className={styles.contextLabel}>{label}</span>
     <div className={styles.tagWrap}>
-      {items.length > 0 ? (
+      {unavailable ? (
+        <Tag type="warm-gray" size="sm">
+          {unavailableLabel}
+        </Tag>
+      ) : items.length > 0 ? (
         items.map((item, i) => (
           <Tag key={i} type={tagType as 'red' | 'magenta' | 'teal'} size="sm">
             {item}
@@ -162,13 +191,13 @@ const ContextGroup: React.FC<{
   </div>
 );
 
-async function fetchFhirList(path: string): Promise<FhirEntry[]> {
+async function fetchFhirList(path: string): Promise<FhirListResult> {
   try {
     const res = await openmrsFetch(path);
     const bundle = res.data;
-    return bundle?.entry ?? [];
+    return { entries: bundle?.entry ?? [], failed: false };
   } catch {
-    return [];
+    return { entries: [], failed: true };
   }
 }
 

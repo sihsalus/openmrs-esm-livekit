@@ -76,6 +76,7 @@
 .tileHeader {
   align-items: center;
   display: flex;
+  gap: layout.$spacing-04;
   justify-content: space-between;
 
   h2 {
@@ -83,6 +84,14 @@
     font-weight: 600;
     margin: 0;
   }
+}
+
+.tileActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: layout.$spacing-03;
+  justify-content: flex-end;
 }
 
 .description {
@@ -130,6 +139,116 @@
     color: var(--cds-text-helper);
     font-family: monospace;
     font-size: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+}
+
+.validationGrid {
+  display: grid;
+  gap: layout.$spacing-04;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+
+.resourceBlock {
+  background: var(--cds-layer-02);
+  border: 1px solid var(--cds-border-subtle-01);
+  display: grid;
+  gap: layout.$spacing-03;
+  padding: layout.$spacing-04;
+
+  p {
+    color: var(--cds-text-primary);
+    font-size: 0.875rem;
+    margin: 0;
+  }
+
+  code {
+    color: var(--cds-text-secondary);
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+}
+
+.resourceHeader {
+  align-items: center;
+  display: flex;
+  gap: layout.$spacing-03;
+  justify-content: space-between;
+
+  h3 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0;
+  }
+}
+
+.resourceMeta {
+  color: var(--cds-text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  gap: layout.$spacing-03;
+}
+
+.errorList {
+  color: var(--cds-text-error);
+  display: grid;
+  font-size: 0.8125rem;
+  gap: layout.$spacing-02;
+  margin: 0;
+  padding-left: layout.$spacing-05;
+}
+
+.adminError {
+  color: var(--cds-text-error);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.auditList {
+  display: grid;
+  gap: layout.$spacing-03;
+}
+
+.auditEvent {
+  background: var(--cds-layer-02);
+  border-left: 3px solid var(--cds-border-interactive);
+  display: grid;
+  gap: layout.$spacing-03;
+  padding: layout.$spacing-04;
+
+  > div:first-child {
+    align-items: center;
+    display: flex;
+    gap: layout.$spacing-03;
+    justify-content: space-between;
+
+    strong {
+      font-size: 0.875rem;
+    }
+
+    span {
+      color: var(--cds-text-secondary);
+      font-size: 0.75rem;
+    }
+  }
+
+  dl {
+    display: grid;
+    gap: layout.$spacing-03;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+    margin: 0;
+  }
+
+  dt {
+    color: var(--cds-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  dd {
+    font-size: 0.8125rem;
+    margin: 0;
     overflow-wrap: anywhere;
   }
 }

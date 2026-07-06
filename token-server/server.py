@@ -16,7 +16,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import error as urllib_error
 from urllib import request as urllib_request
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 try:
     import jwt
@@ -26,8 +26,10 @@ from local_ai import (
     build_health_response,
     compile_encounter,
     generate_synthetic_consultation,
+    openmrs_draft_write_config,
     queue_openmrs_draft,
     recording_session,
+    recent_draft_audit,
     stt_response,
     translate_text,
     tts_response,
@@ -87,6 +89,8 @@ TOKEN_SERVER_REQUIRE_OPENMRS_SESSION = env_flag("TOKEN_SERVER_REQUIRE_OPENMRS_SE
 OPENMRS_SESSION_AUTH_PATHS = {
     "/token",
     "/openmrs/draft",
+    "/openmrs/draft/audit",
+    "/openmrs/draft/config",
     "/compile-encounter",
     "/recording/session",
     "/synthetic-consultation",
@@ -145,8 +149,19 @@ def base64url_bytes(payload: bytes) -> str:
 class TokenHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self._path()
+        if self._requires_openmrs_session(path) and not self._require_openmrs_session():
+            return
+
         if path == "/health":
             self._send_json(build_token_server_health())
+            return
+
+        if path == "/openmrs/draft/config":
+            self._handle_json_get(lambda: openmrs_draft_write_config(self._request_context()))
+            return
+
+        if path == "/openmrs/draft/audit":
+            self._handle_json_get(lambda: recent_draft_audit(self._query_int("limit", 20)))
             return
 
         self.send_error(404)
@@ -189,6 +204,14 @@ class TokenHandler(BaseHTTPRequestHandler):
 
         try:
             self._send_json(handler(self._read_json()))
+        except ValueError as error:
+            self._send_json({"status": "error", "error": str(error)}, status=400)
+        except Exception as error:
+            self._send_json({"status": "error", "error": str(error)}, status=500)
+
+    def _handle_json_get(self, handler):
+        try:
+            self._send_json(handler())
         except ValueError as error:
             self._send_json({"status": "error", "error": str(error)}, status=400)
         except Exception as error:
@@ -323,6 +346,13 @@ class TokenHandler(BaseHTTPRequestHandler):
 
     def _path(self):
         return self.path.split("?", 1)[0]
+
+    def _query_int(self, key: str, default: int) -> int:
+        value = parse_qs(urlparse(self.path).query).get(key, [str(default)])[0]
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
 
     def _read_json(self):
         length = int(self.headers.get("Content-Length", 0))

@@ -27,9 +27,62 @@ describe('LivekitConfigurationPage', () => {
   });
 
   it('renders the operational LiveKit configuration and service health outside the clinical modal', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/openmrs/draft/config')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'validated',
+            enabled: true,
+            message: 'OpenMRS draft write configuration is valid.',
+            values: {
+              encounterTypeUuid: 'encounter-type-uuid',
+              locationUuid: 'location-uuid',
+              draftObsConceptUuid: 'obs-concept-uuid',
+            },
+            resources: {
+              encounterType: {
+                status: 'ok',
+                uuid: 'encounter-type-uuid',
+                display: 'Visit Note',
+              },
+              location: {
+                status: 'ok',
+                uuid: 'location-uuid',
+                display: 'Outpatient Clinic',
+              },
+              draftObsConcept: {
+                status: 'ok',
+                uuid: 'obs-concept-uuid',
+                display: 'Text of encounter note',
+                datatype: 'Text',
+              },
+            },
+            validationErrors: [],
+          }),
+        });
+      }
+
+      if (url.includes('/openmrs/draft/audit')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'ok',
+            events: [
+              {
+                id: 'audit-event-1',
+                createdAt: 1783296000,
+                eventType: 'draft_write_rejected',
+                openmrsWrite: 'visit_required',
+                message: 'OpenMRS write requested, but no active visitUuid was supplied.',
+                rawClinicalTextStored: false,
+              },
+            ],
+          }),
+        });
+      }
+
+      return Promise.resolve({
         ok: true,
         json: async () => ({
           services: {
@@ -49,8 +102,9 @@ describe('LivekitConfigurationPage', () => {
             localStorage: { status: 'private_files' },
           },
         }),
-      }),
-    );
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
     window.history.replaceState({}, '', '/openmrs/spa/livekit-configuration');
 
     render(<LivekitConfigurationPage />);
@@ -65,5 +119,99 @@ describe('LivekitConfigurationPage', () => {
     expect(screen.getByRole('heading', { name: 'Service health' })).toBeInTheDocument();
     expect(screen.getAllByText('Active via agent')).toHaveLength(3);
     expect(screen.getByText('Review queue')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'OpenMRS draft write configuration' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Validated')).toBeInTheDocument();
+    expect(screen.getByText('Visit Note')).toBeInTheDocument();
+    expect(screen.getByText('Outpatient Clinic')).toBeInTheDocument();
+    expect(screen.getByText('Text of encounter note')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Draft audit' })).toBeInTheDocument();
+    expect(screen.getByText('draft_write_rejected')).toBeInTheDocument();
+    expect(screen.getByText('visit_required')).toBeInTheDocument();
+  });
+
+  it('keeps validated draft write configuration visible when audit loading fails', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/openmrs/draft/config')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'validated',
+            enabled: true,
+            values: {
+              encounterTypeUuid: 'encounter-type-uuid',
+              locationUuid: 'location-uuid',
+              draftObsConceptUuid: 'obs-concept-uuid',
+            },
+            resources: {
+              encounterType: {
+                status: 'ok',
+                uuid: 'encounter-type-uuid',
+                display: 'Visit Note',
+              },
+              location: {
+                status: 'ok',
+                uuid: 'location-uuid',
+                display: 'Outpatient Clinic',
+              },
+              draftObsConcept: {
+                status: 'ok',
+                uuid: 'obs-concept-uuid',
+                display: 'Text of encounter note',
+                datatype: 'Text',
+              },
+            },
+            validationErrors: [],
+          }),
+        });
+      }
+
+      if (url.includes('/openmrs/draft/audit')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ message: 'Audit store unavailable' }), {
+            status: 500,
+            statusText: 'Internal Server Error',
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          services: {
+            livekit: { status: 'ok' },
+            tokenServer: { status: 'ok' },
+            agent: { status: 'ok' },
+            openmrs: { status: 'ok' },
+            openmrsDraftWrite: { status: 'configured' },
+            agentCapabilities: {
+              stt: { status: 'configured' },
+              tts: { status: 'configured' },
+              llm: { status: 'ok' },
+            },
+            tokenServerAuth: { status: 'enforced' },
+            productionReadiness: { status: 'ok' },
+            cors: { status: 'ok' },
+            localStorage: { status: 'private_files' },
+          },
+        }),
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    window.history.replaceState({}, '', '/openmrs/spa/livekit-configuration');
+
+    render(<LivekitConfigurationPage />);
+
+    expect(await screen.findByText('Visit Note')).toBeInTheDocument();
+    expect(screen.getByText('Outpatient Clinic')).toBeInTheDocument();
+    expect(screen.getByText('Text of encounter note')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        'Draft audit request failed: 500 Internal Server Error - Audit store unavailable',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Draft audit unavailable.')).toBeInTheDocument();
   });
 });

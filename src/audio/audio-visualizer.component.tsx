@@ -84,13 +84,28 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       return;
     }
 
-    const audioCtx = new AudioContext();
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 128;
-    analyser.smoothingTimeConstant = 0.7;
+    const AudioContextConstructor =
+      window.AudioContext ??
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) {
+      resetLevel();
+      return;
+    }
 
-    const source = audioCtx.createMediaStreamSource(track.mediaStream);
-    source.connect(analyser);
+    let audioCtx: AudioContext;
+    let analyser: AnalyserNode;
+    let source: MediaStreamAudioSourceNode;
+    try {
+      audioCtx = new AudioContextConstructor();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 128;
+      analyser.smoothingTimeConstant = 0.7;
+      source = audioCtx.createMediaStreamSource(track.mediaStream);
+      source.connect(analyser);
+    } catch {
+      resetLevel();
+      return;
+    }
 
     audioCtxRef.current = audioCtx;
     analyserRef.current = analyser;

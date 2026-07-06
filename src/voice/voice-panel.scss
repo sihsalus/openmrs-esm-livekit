@@ -158,6 +158,14 @@
   text-align: center;
 }
 
+.postSaveActions {
+  align-self: center;
+
+  :global(.cds--btn) {
+    max-width: none;
+  }
+}
+
 /* ---- Sections ---- */
 
 .section {
