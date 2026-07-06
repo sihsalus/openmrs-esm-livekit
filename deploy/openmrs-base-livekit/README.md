@@ -42,9 +42,10 @@ npm account that can publish the package, then publish a new patch version or
 rerun the failed tag job only after confirming the token permission.
 
 If the current source has not been published to npm yet, build the local bundle
-and update the OpenMRS importmap as a temporary hotfix instead of relying on the
-assembly version. Keep this as a short-lived deployment workaround; the
-reproducible path is still the npm package version above.
+and update the OpenMRS importmap and route registry as a temporary hotfix
+instead of relying on the assembly version. Keep this as a short-lived
+deployment workaround; the reproducible path is still the npm package version
+above.
 
 If the package has been published but a full OpenMRS frontend rebuild fails on
 unrelated `@openmrs/*` registry timeouts, deploy the published npm tarball as the
@@ -61,6 +62,12 @@ Copy `package/dist/*` into the frontend nginx document root under
 ```text
 ./sihsalus-esm-livekit-app-0.1.28/openmrs-esm-livekit-app.js
 ```
+
+Also replace the `@sihsalus/esm-livekit-app` entry in `routes.registry.json`
+with the package `routes.json`. OpenMRS reads this registry to discover pages,
+modals, and extension cards such as the system administration configuration
+link. Updating only the importmap loads the new bundle but leaves old route
+metadata in place.
 
 Keep `frontend/spa-assemble-config.json` on the same published version so the
 next successful full frontend rebuild converges back to the normal assembly
@@ -176,11 +183,13 @@ room is opened from OpenMRS. Expected agent logs include `Metadata parsed` or
 `Room metadata derived from room name`.
 
 For a frontend hotfix deployment, also verify that the OpenMRS importmap points
-at the uploaded bundle and that nginx serves it:
+at the uploaded bundle, nginx serves it, and the OpenMRS route registry includes
+the package route metadata:
 
 ```bash
 curl http://<openmrs-host>/openmrs/spa/importmap.json
 curl -I http://<openmrs-host>/openmrs/spa/<uploaded-bundle-dir>/openmrs-esm-livekit-app.js
+curl http://<openmrs-host>/openmrs/spa/routes.registry.json
 ```
 
 The deployed bundle should include the OpenMRS base FHIR workaround: it fetches

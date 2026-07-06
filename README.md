@@ -312,8 +312,8 @@ npm view @sihsalus/esm-livekit-app version
 Set `OPENMRS_LIVEKIT_FRONTEND_VERSION` only to a version that is actually
 published on npm. If a release tag builds successfully but npm publish fails, the
 OpenMRS frontend can temporarily serve a locally built `dist/` directory via the
-importmap for deployment recovery, but that hotfix is not the long-term
-reproducible path.
+importmap and route registry for deployment recovery, but that hotfix is not the
+long-term reproducible path.
 
 Install into the OpenMRS distro:
 
