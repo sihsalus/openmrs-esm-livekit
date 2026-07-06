@@ -23,9 +23,34 @@ vi.mock('react-i18next', () => ({
 describe('LivekitConfigurationPage', () => {
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
-  it('renders the operational LiveKit configuration outside the clinical modal', () => {
+  it('renders the operational LiveKit configuration and service health outside the clinical modal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          services: {
+            livekit: { status: 'ok' },
+            tokenServer: { status: 'ok' },
+            agent: { status: 'ok' },
+            openmrs: { status: 'ok' },
+            openmrsDraftWrite: { status: 'disabled' },
+            agentCapabilities: {
+              stt: { status: 'configured' },
+              tts: { status: 'configured' },
+              llm: { status: 'ok' },
+            },
+            tokenServerAuth: { status: 'enforced' },
+            productionReadiness: { status: 'ok' },
+            cors: { status: 'ok' },
+            localStorage: { status: 'private_files' },
+          },
+        }),
+      }),
+    );
     window.history.replaceState({}, '', '/openmrs/spa/livekit-configuration');
 
     render(<LivekitConfigurationPage />);
@@ -35,5 +60,10 @@ describe('LivekitConfigurationPage', () => {
     expect(screen.getByText('/openmrs/livekit/token')).toBeInTheDocument();
     expect(screen.getByText('http://localhost:3000/openmrs/livekit/token')).toBeInTheDocument();
     expect(screen.getByText('openmrs-voice-')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Privacy & service health' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Privacy guarantees' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Service health' })).toBeInTheDocument();
+    expect(screen.getAllByText('Active via agent')).toHaveLength(3);
+    expect(screen.getByText('Review queue')).toBeInTheDocument();
   });
 });

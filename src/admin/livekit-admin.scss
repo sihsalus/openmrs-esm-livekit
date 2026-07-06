@@ -69,6 +69,10 @@
   gap: layout.$spacing-04;
 }
 
+.wideTile {
+  grid-column: 1 / -1;
+}
+
 .tileHeader {
   align-items: center;
   display: flex;

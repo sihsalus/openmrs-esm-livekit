@@ -1,3 +1,5 @@
+import { resolveTokenServerPath } from './livekit-token';
+
 export type ServiceStatus = 'ok' | 'error' | 'pending' | 'checking';
 export type CapabilitySource = 'agent' | 'helper' | 'unknown';
 
@@ -89,6 +91,48 @@ export function normalizeTokenServerHealth(payload: unknown): ServiceHealth | nu
     cors: serviceHealthToStatus(serviceStatus(services.cors)),
     localStorage: serviceHealthToStatus(serviceStatus(services.localStorage)),
   };
+}
+
+export async function fetchServiceHealth(livekitUrl: string, tokenEndpoint: string): Promise<ServiceHealth> {
+  try {
+    const res = await fetch(resolveTokenServerPath(tokenEndpoint, '/health'), {
+      method: 'GET',
+      credentials: 'include',
+      signal: AbortSignal.timeout(5000),
+    });
+    const payload = await res.json().catch(() => null);
+    const health = normalizeTokenServerHealth(payload);
+    if (!res.ok || !health) {
+      throw new Error('Token server health response was not available');
+    }
+
+    return health;
+  } catch {
+    let fallbackHealth: ServiceHealth = {
+      ...initialHealth,
+      tokenServer: 'error',
+      livekit: 'checking',
+      openmrs: 'checking',
+    };
+    const httpLivekit = livekitUrl.replace(/^ws/, 'http');
+    const checks: Array<{ key: 'livekit' | 'openmrs'; url: string }> = [
+      { key: 'livekit', url: httpLivekit },
+      { key: 'openmrs', url: '/openmrs/ws/fhir2/R4/metadata' },
+    ];
+
+    await Promise.all(
+      checks.map(async ({ key, url }) => {
+        try {
+          const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(5000) });
+          fallbackHealth = { ...fallbackHealth, [key]: res.ok ? 'ok' : 'error' };
+        } catch {
+          fallbackHealth = { ...fallbackHealth, [key]: 'error' };
+        }
+      }),
+    );
+
+    return fallbackHealth;
+  }
 }
 
 export function serviceHealthToStatus(status: unknown): ServiceStatus {

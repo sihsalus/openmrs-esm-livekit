@@ -1,15 +1,43 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Tag, Tile } from '@carbon/react';
 import { useConfig } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
 import type { Config } from '../config-schema';
+import {
+  checkingHealth,
+  fetchServiceHealth,
+  initialHealth,
+  type ServiceHealth,
+} from '../livekit/agent-health';
 import { resolveLivekitOperationalConfig } from '../livekit/livekit-config';
+import PrivacyServiceHealth from '../livekit/privacy-service-health.component';
 import styles from './livekit-admin.scss';
 
 const LivekitConfigurationPage: React.FC = () => {
   const { t } = useTranslation();
   const config = useConfig<Config>();
   const operationalConfig = useMemo(() => resolveLivekitOperationalConfig(config), [config]);
+  const [health, setHealth] = useState<ServiceHealth>(initialHealth);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHealth(checkingHealth());
+    fetchServiceHealth(operationalConfig.livekitServerUrl, operationalConfig.tokenEndpoint)
+      .then((nextHealth) => {
+        if (!cancelled) {
+          setHealth(nextHealth);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHealth((currentHealth) => ({ ...currentHealth, tokenServer: 'error' }));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [operationalConfig.livekitServerUrl, operationalConfig.tokenEndpoint]);
 
   return (
     <main className={styles.page}>
@@ -79,6 +107,13 @@ const LivekitConfigurationPage: React.FC = () => {
               <dd>{operationalConfig.roomPrefix}</dd>
             </div>
           </dl>
+        </Tile>
+
+        <Tile className={`${styles.configTile} ${styles.wideTile}`}>
+          <div className={styles.tileHeader}>
+            <h2>{t('privacyAndStatus', 'Privacy & service health')}</h2>
+          </div>
+          <PrivacyServiceHealth health={health} />
         </Tile>
       </div>
     </main>

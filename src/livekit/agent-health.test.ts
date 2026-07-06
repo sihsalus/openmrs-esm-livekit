@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { normalizeTokenServerHealth, serviceHealthToStatus } from './agent-health';
+// @vitest-environment happy-dom
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fetchServiceHealth, normalizeTokenServerHealth, serviceHealthToStatus } from './agent-health';
 
 describe('agent health normalization', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('maps helper service statuses into frontend status tags', () => {
     expect(serviceHealthToStatus('ok')).toBe('ok');
     expect(serviceHealthToStatus('configured')).toBe('ok');
@@ -132,5 +137,44 @@ describe('agent health normalization', () => {
   it('rejects malformed health payloads', () => {
     expect(normalizeTokenServerHealth(null)).toBeNull();
     expect(normalizeTokenServerHealth({})).toBeNull();
+  });
+
+  it('fetches health through the token server route', async () => {
+    window.history.replaceState({}, '', '/openmrs/spa/home');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        services: {
+          livekit: { status: 'ok' },
+          tokenServer: { status: 'ok' },
+          agent: { status: 'ok' },
+          openmrs: { status: 'ok' },
+          openmrsDraftWrite: { status: 'disabled' },
+          agentCapabilities: {
+            stt: { status: 'configured' },
+            tts: { status: 'configured' },
+            llm: { status: 'configured' },
+          },
+          tokenServerAuth: { status: 'enforced' },
+          productionReadiness: { status: 'enforced' },
+          cors: { status: 'configured' },
+          localStorage: { status: 'private_files' },
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchServiceHealth('wss://livekit.example/livekit-sfu', '/openmrs/livekit/token'),
+    ).resolves.toMatchObject({
+      tokenServer: 'ok',
+      stt: 'ok',
+      sttSource: 'agent',
+      openmrsDraftWrite: 'pending',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/openmrs/livekit/health',
+      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+    );
   });
 });

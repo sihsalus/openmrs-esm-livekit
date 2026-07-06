@@ -6,7 +6,7 @@ import {
   useLocalParticipant,
 } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
-import { Button, Tag, Tile, TextArea, TextInput, Accordion, AccordionItem, ButtonSet } from '@carbon/react';
+import { Button, Tag, Tile, TextArea, TextInput, ButtonSet } from '@carbon/react';
 import {
   Microphone,
   MicrophoneOff,
@@ -16,7 +16,6 @@ import {
   WarningAlt,
   CircleDash,
   InProgress,
-  Security,
   Save,
 } from '@carbon/icons-react';
 import { useConfig, usePatient, useVisit } from '@openmrs/esm-framework';
@@ -24,17 +23,15 @@ import { useTranslation } from 'react-i18next';
 import {
   buildQueuedOpenmrsDraftPayload,
   fetchLivekitToken,
-  resolveTokenServerPath,
   saveOpenmrsDraft,
 } from '../livekit/livekit-token';
 import { resolveLivekitOperationalConfig } from '../livekit/livekit-config';
 import { useAgentData, type AgentClinicalFact, type AgentTranscript } from '../livekit/use-agent-data';
 import {
   checkingHealth,
+  fetchServiceHealth,
   initialHealth,
-  normalizeTokenServerHealth,
   type ServiceHealth,
-  type ServiceStatus,
 } from '../livekit/agent-health';
 import {
   isBrowserMicrophoneAvailable,
@@ -558,15 +555,6 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     return () => clearInterval(interval);
   }, [agentError, agentHasActivity, connectionState, hasFlowOutput]);
 
-  const agentHealth: ServiceStatus = agentError
-    ? 'error'
-    : agentHasActivity
-      ? 'ok'
-      : connectionState === ConnectionState.Connected
-        ? agentWaitSeconds >= agentFallbackDelaySeconds
-          ? 'error'
-          : 'checking'
-        : 'pending';
   const showAgentFallback =
     connectionState === ConnectionState.Connected &&
     agentWaitSeconds >= agentFallbackDelaySeconds &&
@@ -736,25 +724,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       detail: t('openmrsDraftDetail', 'Compile an anonymized, clinician-reviewable encounter draft.'),
     },
   ];
-  const aiCapabilityPendingLabel = t('activeViaAgent', 'Active via agent');
-  const sttHealthDetail =
-    health.sttSource === 'agent'
-      ? t(
-          'sttAgentCapabilityDetail',
-          'Speech-to-text is provided by the LiveKit agent, not the helper /stt endpoint.',
-        )
-      : t('sttHelperCapabilityDetail', 'Optional helper /stt endpoint for smoke tests.');
-  const ttsHealthDetail =
-    health.ttsSource === 'agent'
-      ? t(
-          'ttsAgentCapabilityDetail',
-          'Text-to-speech is provided by the LiveKit agent, not the helper /tts endpoint.',
-        )
-      : t('ttsHelperCapabilityDetail', 'Optional helper /tts endpoint for smoke tests.');
-  const llmHealthDetail =
-    health.llmSource === 'agent'
-      ? t('llmAgentCapabilityDetail', 'Clinical drafting and tool calls are provided by the LiveKit agent.')
-      : t('llmHelperCapabilityDetail', 'Helper parser status for smoke tests and draft fallback.');
+  const draftWriteQueued = health.openmrsDraftWrite === 'pending';
 
   return (
     <div className={styles.session}>
@@ -941,6 +911,14 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
             </div>
           </div>
           {draftSaveMessage && <p className={styles.agentStatus}>{draftSaveMessage}</p>}
+          {draftWriteQueued && !draftSaved && (
+            <p className={styles.agentStatus}>
+              {t(
+                'draftReviewQueueOnlyDetail',
+                'OpenMRS encounter write is not configured yet; this draft will stay in the review queue.',
+              )}
+            </p>
+          )}
           <div className={styles.draftGrid}>
             <TextInput
               id="chief-complaint"
@@ -1036,123 +1014,6 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           )}
         </section>
       )}
-
-      {/* ---- Privacy & service health ---- */}
-      <Accordion>
-        <AccordionItem title={t('privacyAndStatus', 'Privacy & service health')}>
-          <div className={styles.bottomPanels}>
-            <div className={styles.privacyPanel}>
-              <h5>{t('privacyGuarantees', 'Privacy guarantees')}</h5>
-              <ul className={styles.privacyList}>
-                <PrivacyItem icon={Security} text={t('rawAudioNotStored', 'Raw audio not stored')} />
-                <PrivacyItem icon={Security} text={t('localAiProcessing', 'Local AI processing')} />
-                <PrivacyItem icon={Security} text={t('phiRedaction', 'PHI redaction enabled')} />
-                <PrivacyItem
-                  icon={Security}
-                  text={t('clinicianReviewRequired', 'Clinician review required')}
-                />
-                <PrivacyItem icon={Security} text={t('offlineCapable', 'Offline-capable architecture')} />
-              </ul>
-            </div>
-            <div className={styles.healthPanel}>
-              <h5>{t('serviceHealth', 'Service health')}</h5>
-              <div className={styles.healthGroup}>
-                <h6>{t('runtimeServices', 'Runtime services')}</h6>
-                <ul className={styles.healthList}>
-                  <HealthRow
-                    label="LiveKit"
-                    status={health.livekit}
-                    detail={t('livekitHealthDetail', 'Room transport and media server')}
-                  />
-                  <HealthRow
-                    label={t('tokenServer', 'Token server')}
-                    status={health.tokenServer}
-                    detail={t('tokenServerHealthDetail', 'Room tokens and helper API')}
-                  />
-                  <HealthRow
-                    label={t('agent', 'Agent')}
-                    status={agentHealth}
-                    detail={t('agentHealthDetail', 'Publishes transcript and draft data')}
-                  />
-                  <HealthRow
-                    label="OpenMRS"
-                    status={health.openmrs}
-                    detail={t('openmrsHealthDetail', 'Patient record and encounter write target')}
-                  />
-                  <HealthRow
-                    label={t('draftWrite', 'Draft write')}
-                    status={health.openmrsDraftWrite}
-                    detail={t('draftWriteHealthDetail', 'Encounter save configuration')}
-                  />
-                </ul>
-              </div>
-              <div className={styles.healthGroup}>
-                <h6>{t('localAiCapabilities', 'Local AI capabilities')}</h6>
-                <ul className={styles.healthList}>
-                  <HealthRow
-                    label="STT"
-                    status={health.stt}
-                    detail={sttHealthDetail}
-                    statusText={
-                      health.sttSource === 'agent' && health.stt === 'ok'
-                        ? aiCapabilityPendingLabel
-                        : undefined
-                    }
-                  />
-                  <HealthRow
-                    label="TTS"
-                    status={health.tts}
-                    detail={ttsHealthDetail}
-                    statusText={
-                      health.ttsSource === 'agent' && health.tts === 'ok'
-                        ? aiCapabilityPendingLabel
-                        : undefined
-                    }
-                  />
-                  <HealthRow
-                    label="LLM"
-                    status={health.llm}
-                    detail={llmHealthDetail}
-                    statusText={
-                      health.llmSource === 'agent' && health.llm === 'ok'
-                        ? aiCapabilityPendingLabel
-                        : undefined
-                    }
-                  />
-                </ul>
-              </div>
-              <div className={styles.healthGroup}>
-                <h6>{t('deploymentReadiness', 'Deployment readiness')}</h6>
-                <ul className={styles.healthList}>
-                  <HealthRow
-                    label={t('productionGate', 'Production gate')}
-                    status={health.productionReadiness}
-                    detail={t('productionGateDetail', 'Rejects unsafe shared deployment config')}
-                  />
-                  <HealthRow
-                    label={t('tokenServerAuth', 'Token server auth')}
-                    status={health.tokenServerAuth}
-                    detail={t(
-                      'tokenServerAuthDetail',
-                      'Requires an authenticated OpenMRS session when enforced',
-                    )}
-                  />
-                  <HealthRow
-                    label="CORS"
-                    status={health.cors}
-                    detail={t('corsHealthDetail', 'Browser origin allowlist')}
-                  />
-                  <HealthRow
-                    label={t('localStorage', 'Local storage')}
-                    status={health.localStorage}
-                    detail={t('localStorageHealthDetail', 'Draft and manifest files are owner-only')}
-                  />
-                </ul>
-              </div>
-            </div>
-          </div>
-        </AccordionItem>
-      </Accordion>
     </div>
   );
 };
@@ -1209,46 +1070,6 @@ const LanguageToggle: React.FC<LanguageToggleProps> = ({ label, value, onChange 
         </Button>
       </div>
     </div>
-  );
-};
-
-const PrivacyItem: React.FC<{ icon: React.ComponentType; text: string }> = ({ icon: Icon, text }) => (
-  <li className={styles.privacyItem}>
-    <Icon />
-    <span>{text}</span>
-  </li>
-);
-
-const HealthRow: React.FC<{ label: string; status: ServiceStatus; detail?: string; statusText?: string }> = ({
-  label,
-  status,
-  detail,
-  statusText,
-}) => {
-  const { t } = useTranslation();
-  const statusLabel: Record<ServiceStatus, string> = {
-    ok: t('healthy', 'Healthy'),
-    error: t('unreachable', 'Unreachable'),
-    pending: t('pendingBackend', 'Pending backend'),
-    checking: t('checking', 'Checking...'),
-  };
-  const tagType: Record<ServiceStatus, string> = {
-    ok: 'green',
-    error: 'red',
-    pending: 'gray',
-    checking: 'blue',
-  };
-
-  return (
-    <li className={styles.healthRow}>
-      <span>
-        <strong>{label}</strong>
-        {detail && <small>{detail}</small>}
-      </span>
-      <Tag type={tagType[status] as 'green' | 'red' | 'gray' | 'blue'} size="sm">
-        {statusText ?? statusLabel[status]}
-      </Tag>
-    </li>
   );
 };
 
@@ -1330,49 +1151,11 @@ async function checkHealth(
   setHealth: React.Dispatch<React.SetStateAction<ServiceHealth>>,
 ) {
   setHealth(checkingHealth());
-
-  const httpLivekit = livekitUrl.replace(/^ws/, 'http');
-
   try {
-    const res = await fetch(resolveTokenServerPath(tokenEndpoint, '/health'), {
-      method: 'GET',
-      credentials: 'include',
-      signal: AbortSignal.timeout(5000),
-    });
-    const payload = await res.json().catch(() => null);
-    const health = normalizeTokenServerHealth(payload);
-    if (!res.ok || !health) {
-      throw new Error('Token server health response was not available');
-    }
-
-    setHealth(health);
-    return;
+    setHealth(await fetchServiceHealth(livekitUrl, tokenEndpoint));
   } catch {
-    setHealth((h) => ({
-      ...h,
-      tokenServer: 'error',
-      agent: 'pending',
-      stt: 'pending',
-      tts: 'pending',
-      llm: 'pending',
-    }));
+    setHealth((currentHealth) => ({ ...currentHealth, tokenServer: 'error' }));
   }
-
-  const checks: Array<{ key: keyof ServiceHealth; url: string }> = [
-    { key: 'livekit', url: httpLivekit },
-    { key: 'openmrs', url: '/openmrs/ws/fhir2/R4/metadata' },
-  ];
-
-  await Promise.all(
-    checks.map(async ({ key, url }) => {
-      try {
-        const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(5000) });
-        setHealth((h) => ({ ...h, [key]: res.ok ? 'ok' : 'error' }));
-      } catch {
-        setHealth((h) => ({ ...h, [key]: 'error' }));
-      }
-    }),
-  );
 }
 
 export default VoicePanel;
