@@ -25,7 +25,7 @@ The OpenMRS frontend assembly installs the microfrontend from npm. Set
 contains the commit you want to deploy:
 
 ```bash
-OPENMRS_LIVEKIT_FRONTEND_VERSION=0.1.25
+OPENMRS_LIVEKIT_FRONTEND_VERSION=0.1.26
 ```
 
 Verify the package before rebuilding the OpenMRS frontend:
@@ -51,15 +51,15 @@ unrelated `@openmrs/*` registry timeouts, deploy the published npm tarball as th
 temporary importmap hotfix instead of using a local build:
 
 ```bash
-npm pack @sihsalus/esm-livekit-app@0.1.25
-tar -xzf sihsalus-esm-livekit-app-0.1.25.tgz
+npm pack @sihsalus/esm-livekit-app@0.1.26
+tar -xzf sihsalus-esm-livekit-app-0.1.26.tgz
 ```
 
 Copy `package/dist/*` into the frontend nginx document root under
-`sihsalus-esm-livekit-app-0.1.25/`, then point `importmap.json` at:
+`sihsalus-esm-livekit-app-0.1.26/`, then point `importmap.json` at:
 
 ```text
-./sihsalus-esm-livekit-app-0.1.25/openmrs-esm-livekit-app.js
+./sihsalus-esm-livekit-app-0.1.26/openmrs-esm-livekit-app.js
 ```
 
 Keep `frontend/spa-assemble-config.json` on the same published version so the
@@ -95,10 +95,10 @@ The helper mirrors the real-time agent provider names with
 `services.agentCapabilities` so the frontend does not confuse optional helper
 `/stt` and `/tts` endpoints with the active LiveKit agent pipeline.
 
-The CPU agent image currently bundles the Spanish Piper voice used by
-`PIPER_MODEL_PATH_ES`. Set `PIPER_MODEL_PATH_EN` only after adding or mounting an
-English Piper model at that path. `PIPER_MODEL_PATH` is a legacy fallback and is
-not set by the compose file.
+The CPU agent image bundles the Spanish Piper voice used by
+`PIPER_MODEL_PATH_ES` and downloads the English `en_US-lessac-medium` Piper
+voice during the agent image build. `PIPER_MODEL_PATH` is a legacy fallback and
+is not set by the compose file.
 
 ## Install Into The OpenMRS Distro
 

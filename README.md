@@ -263,7 +263,9 @@ OPENMRS_STRUCTURED_OBS_CONCEPTS='{"chiefComplaint":"...","symptoms":"...","medic
 
 To request a real OpenMRS write, send `writeToOpenmrs: true` or
 `mode: "write"`. The server writes only when `OPENMRS_DRAFT_WRITE_ENABLED=true`
-and required OpenMRS metadata are configured. Authentication can come from
+and required OpenMRS metadata are configured. Real writes also require a
+`visitUuid` for an active visit belonging to the patient; drafts without an
+active visit remain queued for review. Authentication can come from
 `OPENMRS_USERNAME` and `OPENMRS_PASSWORD`, `OPENMRS_BASIC_AUTH`, or the forwarded
 OpenMRS browser session cookie.
 

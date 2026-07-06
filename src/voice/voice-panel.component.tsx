@@ -6,7 +6,17 @@ import {
   useLocalParticipant,
 } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
-import { Button, Tag, Tile, TextArea, TextInput, Accordion, AccordionItem, ButtonSet } from '@carbon/react';
+import {
+  Button,
+  Tag,
+  Tile,
+  TextArea,
+  TextInput,
+  Accordion,
+  AccordionItem,
+  ButtonSet,
+  InlineNotification,
+} from '@carbon/react';
 import {
   Microphone,
   MicrophoneOff,
@@ -19,7 +29,7 @@ import {
   Security,
   Save,
 } from '@carbon/icons-react';
-import { useConfig, usePatient } from '@openmrs/esm-framework';
+import { useConfig, usePatient, useVisit } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
 import {
   buildQueuedOpenmrsDraftPayload,
@@ -176,6 +186,8 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   const { t, i18n } = useTranslation();
   const config = useConfig<Config>();
   const { patient, isLoading: patientLoading } = usePatient();
+  const patientUuid = patient?.id ?? '';
+  const { activeVisit, error: activeVisitError, isLoading: activeVisitLoading } = useVisit(patientUuid);
   const openmrsLocale = openmrsLocaleFromI18n(i18n);
   const defaultLanguages = useMemo(() => clinicalLanguageDefaultsFromLocale(openmrsLocale), [openmrsLocale]);
   const languageSelectionTouched = useRef(false);
@@ -195,6 +207,12 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   const [doctorLanguage, setDoctorLanguage] = useState<LanguageCode>(defaultLanguages.doctorLanguage);
   const [patientLanguage, setPatientLanguage] = useState<LanguageCode>(defaultLanguages.patientLanguage);
   const [agentVoiceLanguage, setAgentVoiceLanguage] = useState<LanguageCode>(defaultLanguages.doctorLanguage);
+  const activeVisitUuid = activeVisit?.uuid ?? '';
+  const shouldWaitForVisit = Boolean(patientUuid) && activeVisitLoading;
+  const activeVisitRequiredMessage = t(
+    'activeVisitRequiredDetail',
+    'Start an active visit before opening a voice consultation so any reviewed draft can be attached to that visit.',
+  );
 
   useEffect(() => {
     if (languageSelectionTouched.current) {
@@ -227,18 +245,28 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   }, []);
 
   const connect = useCallback(async () => {
-    if (!patient?.id) {
+    if (!patientUuid) {
       setError(t('missingPatient', 'No patient context is available for this voice consultation.'));
+      return;
+    }
+    if (!activeVisitUuid) {
+      setError(activeVisitRequiredMessage);
       return;
     }
     setConnecting(true);
     setError(null);
     try {
-      const result = await fetchLivekitToken(patient.id, tokenEndpoint, roomPrefix, {
-        doctorLanguage,
-        patientLanguage,
-        agentVoiceLanguage,
-      });
+      const result = await fetchLivekitToken(
+        patientUuid,
+        tokenEndpoint,
+        roomPrefix,
+        {
+          doctorLanguage,
+          patientLanguage,
+          agentVoiceLanguage,
+        },
+        { visitUuid: activeVisitUuid },
+      );
       setToken(result.token);
       setRoomName(result.roomName);
     } catch (e) {
@@ -253,7 +281,17 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
     } finally {
       setConnecting(false);
     }
-  }, [agentVoiceLanguage, doctorLanguage, patient?.id, patientLanguage, roomPrefix, t, tokenEndpoint]);
+  }, [
+    activeVisitRequiredMessage,
+    activeVisitUuid,
+    agentVoiceLanguage,
+    doctorLanguage,
+    patientLanguage,
+    patientUuid,
+    roomPrefix,
+    t,
+    tokenEndpoint,
+  ]);
 
   const disconnect = useCallback(() => {
     setToken(null);
@@ -268,10 +306,13 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
 
   const startConsultationLabel = patientLoading
     ? t('loadingPatient', 'Loading patient...')
-    : connecting
-      ? t('connecting', 'Connecting...')
-      : t('startConsultation', 'Start consultation');
-  const startConsultationDisabled = patientLoading || connecting;
+    : shouldWaitForVisit
+      ? t('loadingVisit', 'Loading visit...')
+      : connecting
+        ? t('connecting', 'Connecting...')
+        : t('startConsultation', 'Start consultation');
+  const startConsultationDisabled =
+    patientLoading || shouldWaitForVisit || connecting || !patientUuid || !activeVisitUuid;
 
   useEffect(() => {
     if (!onPreflightActionsChange) {
@@ -380,6 +421,22 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
         </Tile>
 
         <PatientContext />
+        {!patientLoading && patientUuid && !shouldWaitForVisit && !activeVisitUuid && (
+          <InlineNotification
+            kind="warning"
+            lowContrast
+            hideCloseButton
+            title={t('activeVisitRequired', 'Active visit required')}
+            subtitle={
+              activeVisitError
+                ? t(
+                    'activeVisitLookupFailed',
+                    'Could not confirm an active visit. Refresh the chart or start a visit before using voice consultation.',
+                  )
+                : activeVisitRequiredMessage
+            }
+          />
+        )}
         {error && <p className={styles.error}>{error}</p>}
         {!onPreflightActionsChange && (
           <ButtonSet className={styles.preflightActions}>
@@ -422,6 +479,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
       <RoomAudioRenderer />
       <ActiveSession
         patientUuid={patient?.id ?? ''}
+        visitUuid={activeVisitUuid}
         patientName={patient?.name?.[0]?.text ?? ''}
         roomName={roomName}
         onEnd={disconnect}
@@ -442,6 +500,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
 
 interface ActiveSessionProps {
   patientUuid: string;
+  visitUuid: string;
   patientName: string;
   roomName: string;
   onEnd: () => void;
@@ -455,6 +514,7 @@ interface ActiveSessionProps {
 
 const ActiveSession: React.FC<ActiveSessionProps> = ({
   patientUuid,
+  visitUuid,
   patientName,
   roomName,
   onEnd,
@@ -701,6 +761,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
         tokenEndpoint,
         buildQueuedOpenmrsDraftPayload({
           patientUuid,
+          visitUuid,
           draft,
           redactedTranscript: redactedTranscript || liveTranscriptText,
         }),
@@ -712,7 +773,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     } finally {
       setDraftSaving(false);
     }
-  }, [draft, draftSaving, liveTranscriptText, patientUuid, redactedTranscript, t, tokenEndpoint]);
+  }, [draft, draftSaving, liveTranscriptText, patientUuid, redactedTranscript, t, tokenEndpoint, visitUuid]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);

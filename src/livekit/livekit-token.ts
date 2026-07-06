@@ -6,6 +6,10 @@ export interface LivekitRoomLanguageConfig {
   agentVoiceLanguage: ClinicalLanguageCode;
 }
 
+export interface LivekitRoomContext {
+  visitUuid?: string;
+}
+
 type JsonRecord = Record<string, unknown>;
 
 export async function fetchLivekitToken(
@@ -13,6 +17,7 @@ export async function fetchLivekitToken(
   tokenEndpoint: string,
   roomPrefix: string,
   languageConfig: LivekitRoomLanguageConfig,
+  roomContext: LivekitRoomContext = {},
 ): Promise<{ token: string; roomName: string }> {
   const roomName = buildRoomName(patientUuid, roomPrefix);
   const res = await fetch(tokenEndpoint, {
@@ -23,6 +28,7 @@ export async function fetchLivekitToken(
       patientUuid,
       roomName,
       roomPrefix,
+      ...(roomContext.visitUuid ? { visitUuid: roomContext.visitUuid } : {}),
       ...languageConfig,
       captureRole: 'doctor',
       defaultHumanRole: 'doctor',
@@ -63,6 +69,7 @@ export interface OpenmrsDraftPayload {
     clinicianReviewRequired?: boolean;
   };
   redactedTranscript?: string;
+  visitUuid?: string;
   structuredObsConcepts?: Record<string, string>;
   writeToOpenmrs?: boolean;
 }
