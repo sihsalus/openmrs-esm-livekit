@@ -26,7 +26,7 @@ services:
       - ollama-data:/root/.ollama
 
   livekit-helper:
-    image: ${OPENMRS_LIVEKIT_HELPER_IMAGE:-openmrs-base-livekit-helper:0.1.25}
+    image: ${OPENMRS_LIVEKIT_HELPER_IMAGE:-openmrs-base-livekit-helper:0.1.26}
     build:
       context: ${OPENMRS_ESM_LIVEKIT_PATH:?OPENMRS_ESM_LIVEKIT_PATH is required}
       dockerfile: ${OPENMRS_DISTRO_ROOT:?OPENMRS_DISTRO_ROOT is required}/deploy/livekit/token-server.Dockerfile
@@ -87,8 +87,7 @@ services:
       TTS_LANGUAGE: en
       PIPER_BINARY: /srv/piper/piper/piper
       PIPER_MODEL_PATH_ES: /srv/piper/voices/es_MX-claude-high.onnx
-      # Set this after adding an English Piper voice to the agent image or mounting one.
-      PIPER_MODEL_PATH_EN: ${PIPER_MODEL_PATH_EN:-}
+      PIPER_MODEL_PATH_EN: ${PIPER_MODEL_PATH_EN:-/srv/piper/voices/en_US-lessac-medium.onnx}
       TURN_DETECTION_MODE: vad
       FILLER_SOUND_ENABLED: 'false'
       ENABLE_OPENMRS_TOOLS: 'true'

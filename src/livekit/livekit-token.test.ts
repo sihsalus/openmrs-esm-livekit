@@ -68,9 +68,11 @@ describe('LiveKit token endpoint transport', () => {
           patientInstructions: 'Return if symptoms worsen.',
         },
         redactedTranscript: 'Doctor: cough',
+        visitUuid: 'active-visit-123',
       }),
     ).toMatchObject({
       patientUuid: 'patient-123',
+      visitUuid: 'active-visit-123',
       writeToOpenmrs: false,
     });
   });
@@ -104,6 +106,33 @@ describe('LiveKit token endpoint transport', () => {
       captureRole: 'doctor',
       defaultHumanRole: 'doctor',
       speakerAttributionMode: 'source-role',
+    });
+  });
+
+  it('sends the active visit uuid when requesting a room token', async () => {
+    stubBrowserLocation('https://openmrs.example/spa/home');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: 'signed-token', roomName: 'openmrs-voice-patient-123' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchLivekitToken(
+      'patient-123',
+      'https://openmrs.example/livekit/token',
+      'openmrs-voice-',
+      {
+        doctorLanguage: 'en',
+        patientLanguage: 'en',
+        agentVoiceLanguage: 'en',
+      },
+      { visitUuid: 'visit-123' },
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      patientUuid: 'patient-123',
+      visitUuid: 'visit-123',
     });
   });
 

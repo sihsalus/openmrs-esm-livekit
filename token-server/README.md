@@ -305,7 +305,7 @@ By default this endpoint is safe: it queues locally and returns a preview of the
 }
 ```
 
-To request a real OpenMRS write, send `writeToOpenmrs: true` or `mode: "write"`. The server will only write when `OPENMRS_DRAFT_WRITE_ENABLED=true` and the required metadata is configured.
+To request a real OpenMRS write, send `writeToOpenmrs: true` or `mode: "write"`. The server will only write when `OPENMRS_DRAFT_WRITE_ENABLED=true`, the required metadata is configured, and the request includes a `visitUuid` for an active visit belonging to the patient.
 
 Required write configuration:
 

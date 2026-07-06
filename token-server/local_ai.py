@@ -499,6 +499,7 @@ def build_openmrs_draft_integration(
     payload = _build_encounter_payload(body, record.get("draft") or {}, record.get("redactedTranscript"))
     missing = _openmrs_missing_write_config(body)
     patient_uuid = str(body.get("patientUuid") or record.get("patientUuid") or "").strip()
+    visit_uuid = _visit_uuid(body)
     auth_headers = _openmrs_auth_headers(context)
 
     result: dict[str, Any] = {
@@ -510,6 +511,7 @@ def build_openmrs_draft_integration(
         "authSource": _auth_source(context),
         "authenticated": None,
         "requiredConfiguration": missing,
+        "requiredRequestContext": ["visitUuid"],
         "encounterPayload": payload,
     }
 
@@ -530,6 +532,15 @@ def build_openmrs_draft_integration(
             {
                 "writeStatus": "missing_patient",
                 "message": "OpenMRS write requested, but patientUuid was not supplied.",
+            }
+        )
+        return result
+
+    if not visit_uuid:
+        result.update(
+            {
+                "writeStatus": "visit_required",
+                "message": "OpenMRS write requested, but no active visitUuid was supplied. Start a visit before saving an encounter draft.",
             }
         )
         return result
@@ -573,6 +584,20 @@ def build_openmrs_draft_integration(
             {
                 "writeStatus": "patient_not_found",
                 "message": "OpenMRS could not load the requested patient before creating the encounter.",
+            }
+        )
+        return result
+
+    visit = _openmrs_request(
+        f"visit/{urllib.parse.quote(visit_uuid, safe='')}?v=custom:(uuid,patient:(uuid),stopDatetime)",
+        headers=auth_headers,
+    )
+    result["visitCheck"] = visit
+    if not _active_visit_matches_patient(visit.get("body"), patient_uuid):
+        result.update(
+            {
+                "writeStatus": "visit_required",
+                "message": "OpenMRS write requested, but the supplied visitUuid is not an active visit for this patient.",
             }
         )
         return result
@@ -687,7 +712,7 @@ def _build_encounter_payload(
         "location": location,
     }
     if body.get("visitUuid"):
-        payload["visit"] = body["visitUuid"]
+        payload["visit"] = _visit_uuid(body)
     if provider and encounter_role:
         payload["encounterProviders"] = [{"provider": provider, "encounterRole": encounter_role}]
 
@@ -792,6 +817,7 @@ def _openmrs_write_status() -> dict[str, Any]:
         "status": status,
         "enabled": OPENMRS_DRAFT_WRITE_ENABLED,
         "requiredConfiguration": missing,
+        "requiredRequestContext": ["active visitUuid"],
         "optionalConfiguration": [
             "OPENMRS_PROVIDER_UUID",
             "OPENMRS_ENCOUNTER_ROLE_UUID",
@@ -817,6 +843,10 @@ def _body_or_env(body: dict[str, Any], body_key: str, env_value: str) -> str:
     if value is None:
         return env_value
     return str(value).strip() or env_value
+
+
+def _visit_uuid(body: dict[str, Any]) -> str:
+    return str(body.get("visitUuid") or "").strip()
 
 
 def _write_requested(body: dict[str, Any]) -> bool:
@@ -852,6 +882,17 @@ def _auth_source(context: dict[str, Any]) -> str:
     if context.get("cookie"):
         return "request_cookie"
     return "none"
+
+
+def _active_visit_matches_patient(visit: Any, patient_uuid: str) -> bool:
+    if not isinstance(visit, dict):
+        return False
+    if visit.get("stopDatetime") not in (None, ""):
+        return False
+    patient = visit.get("patient")
+    if isinstance(patient, dict):
+        return str(patient.get("uuid") or "").strip() == patient_uuid
+    return True
 
 
 def _openmrs_request(

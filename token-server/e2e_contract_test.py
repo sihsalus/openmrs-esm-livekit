@@ -52,6 +52,28 @@ class FakeOpenMRSHandler(BaseHTTPRequestHandler):
                 return
             self.send_json({"uuid": "patient-uuid", "display": "Synthetic Patient"})
             return
+        if self.path.startswith("/openmrs/ws/rest/v1/visit/"):
+            if not self.headers.get("Authorization") and not self.headers.get("Cookie"):
+                self.send_json({"error": "auth required"}, status=401)
+                return
+            visit_uuid = self.path.split("/visit/", 1)[1].split("?", 1)[0]
+            if visit_uuid == "active-visit-uuid":
+                self.send_json(
+                    {
+                        "uuid": "active-visit-uuid",
+                        "patient": {"uuid": "patient-uuid"},
+                        "stopDatetime": None,
+                    }
+                )
+                return
+            self.send_json(
+                {
+                    "uuid": visit_uuid,
+                    "patient": {"uuid": "patient-uuid"},
+                    "stopDatetime": "2026-07-06T10:00:00.000+0000",
+                }
+            )
+            return
         self.send_json({"error": "not found", "path": self.path}, status=404)
 
     def do_POST(self):
@@ -394,6 +416,7 @@ class TokenServerE2ETest(unittest.TestCase):
             {
                 "patientUuid": "patient-123",
                 "roomPrefix": "openmrs-room-",
+                "visitUuid": "active-visit-uuid",
                 "doctorLanguage": "es",
                 "patientLanguage": "en",
                 "agentVoiceLanguage": "en",
@@ -418,6 +441,7 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(claims["video"]["roomJoin"], True)
         participant_metadata = json.loads(claims["metadata"])
         self.assertEqual(participant_metadata["patientUuid"], "patient-123")
+        self.assertEqual(participant_metadata["visitUuid"], "active-visit-uuid")
         self.assertEqual(participant_metadata["doctorLanguage"], "es")
         self.assertEqual(participant_metadata["patientLanguage"], "en")
         self.assertEqual(participant_metadata["agentVoiceLanguage"], "en")
@@ -435,6 +459,7 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(room_request["payload"]["name"], payload["roomName"])
         room_metadata = json.loads(room_request["payload"]["metadata"])
         self.assertEqual(room_metadata["patientUuid"], "patient-123")
+        self.assertEqual(room_metadata["visitUuid"], "active-visit-uuid")
         self.assertEqual(room_metadata["roomPrefix"], "openmrs-room-")
         self.assertEqual(room_metadata["doctorLanguage"], "es")
         self.assertEqual(room_metadata["patientLanguage"], "en")
@@ -568,6 +593,7 @@ class TokenServerE2ETest(unittest.TestCase):
             "/openmrs/draft",
             {
                 "patientUuid": "patient-uuid",
+                "visitUuid": "active-visit-uuid",
                 "writeToOpenmrs": True,
                 "draft": {
                     "chiefComplaint": "cough",
@@ -586,6 +612,7 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["encounterUuid"], "encounter-created")
         created = FakeOpenMRSHandler.encounter_payloads[-1]
         self.assertEqual(created["patient"], "patient-uuid")
+        self.assertEqual(created["visit"], "active-visit-uuid")
         self.assertEqual(created["encounterType"], "encounter-type-uuid")
         self.assertEqual(created["location"], "location-uuid")
         self.assertEqual(created["encounterProviders"][0]["provider"], "provider-uuid")
@@ -609,6 +636,36 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertNotIn("draft", audit_event)
         self.assertNotIn("redactedTranscript", audit_event)
         self.assertNotIn("Doctor: cough", json.dumps(audit_event))
+
+    def test_openmrs_draft_write_requires_active_visit(self):
+        auth = base64.b64encode(b"admin:Admin123").decode("ascii")
+        payload, _response = request_json(
+            self.base_url,
+            "/openmrs/draft",
+            {
+                "patientUuid": "patient-uuid",
+                "writeToOpenmrs": True,
+                "draft": {
+                    "chiefComplaint": "cough",
+                    "symptoms": ["cough"],
+                    "medicationsMentioned": [],
+                    "allergiesMentioned": [],
+                    "assessmentNotes": "review",
+                    "patientInstructions": "fluids",
+                },
+                "redactedTranscript": "Doctor: cough",
+            },
+            headers={"Authorization": f"Basic {auth}"},
+        )
+
+        self.assertEqual(payload["status"], "queued")
+        self.assertEqual(payload["openmrsWrite"], "visit_required")
+        self.assertEqual(payload["auditEventType"], "draft_write_rejected")
+        audit_event = next(
+            event for event in read_jsonl(Path(self.tempdir.name) / "audit.jsonl") if event["id"] == payload["auditEventId"]
+        )
+        self.assertEqual(audit_event["eventType"], "draft_write_rejected")
+        self.assertEqual(audit_event["openmrsWrite"], "visit_required")
 
     def test_openmrs_draft_queue_creates_minimal_audit_event(self):
         payload, _response = request_json(

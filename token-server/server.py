@@ -222,6 +222,7 @@ class TokenHandler(BaseHTTPRequestHandler):
             body.get("defaultHumanRole"),
             capture_role,
         )
+        visit_uuid = sanitize_openmrs_reference(body.get("visitUuid"))
         identity_prefix = "clinician" if capture_role == "doctor" else "patient"
         identity = f"{identity_prefix}-{int(time.time())}"
 
@@ -232,6 +233,7 @@ class TokenHandler(BaseHTTPRequestHandler):
             patient_language,
             agent_voice_language,
             default_human_role,
+            visit_uuid,
         )
         metadata_result = sync_livekit_room_metadata(room_name, room_metadata)
         token = create_token(
@@ -244,6 +246,7 @@ class TokenHandler(BaseHTTPRequestHandler):
                 "defaultHumanRole": default_human_role,
                 "speakerAttributionMode": "source-role",
                 "patientUuid": patient_uuid,
+                **({"visitUuid": visit_uuid} if visit_uuid else {}),
                 "doctorLanguage": doctor_language,
                 "patientLanguage": patient_language,
                 "agentVoiceLanguage": agent_voice_language,
@@ -387,6 +390,10 @@ def sanitize_capture_role(value: object, fallback: str = DEFAULT_CAPTURE_ROLE) -
     return fallback if fallback in SUPPORTED_CAPTURE_ROLES else DEFAULT_CAPTURE_ROLE
 
 
+def sanitize_openmrs_reference(value: object) -> str:
+    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in str(value or "").strip())
+
+
 def build_room_metadata(
     patient_uuid: str,
     room_prefix: str,
@@ -394,12 +401,13 @@ def build_room_metadata(
     patient_language: str = DEFAULT_CLINICAL_LANGUAGE,
     agent_voice_language: str | None = None,
     default_human_role: str = DEFAULT_CAPTURE_ROLE,
+    visit_uuid: str = "",
 ) -> dict:
     doctor_language = sanitize_language_code(doctor_language, DEFAULT_CLINICAL_LANGUAGE)
     patient_language = sanitize_language_code(patient_language, doctor_language)
     agent_voice_language = sanitize_language_code(agent_voice_language, doctor_language)
     default_human_role = sanitize_capture_role(default_human_role, DEFAULT_CAPTURE_ROLE)
-    return {
+    metadata = {
         "patientUuid": patient_uuid,
         "roomPrefix": room_prefix,
         "doctorLanguage": doctor_language,
@@ -410,6 +418,9 @@ def build_room_metadata(
         "defaultHumanRole": default_human_role,
         "source": "openmrs-livekit-token-server",
     }
+    if visit_uuid:
+        metadata["visitUuid"] = visit_uuid
+    return metadata
 
 
 def sync_livekit_room_metadata(room_name: str, metadata: dict) -> dict:
