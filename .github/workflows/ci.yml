@@ -21,6 +21,9 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
+      - run: yarn format:check
+      - run: yarn lint
+      - run: yarn extract-translations
       - run: yarn build
       - run: yarn typescript
       - run: yarn test

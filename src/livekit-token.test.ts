@@ -5,6 +5,7 @@ import {
   resolveLivekitServerUrl,
   resolveTokenEndpoint,
   resolveTokenServerPath,
+  saveOpenmrsDraft,
 } from './livekit-token';
 
 describe('LiveKit token endpoint transport', () => {
@@ -80,6 +81,88 @@ describe('LiveKit token endpoint transport', () => {
       speakerAttributionMode: 'source-role',
     });
   });
+
+  it('includes JSON error details from token requests', async () => {
+    stubBrowserLocation('https://openmrs.example/spa/home');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            code: 'livekit_metadata_error',
+            error: 'LiveKit room metadata create failed',
+            detail: 'Room service returned 500',
+          },
+          500,
+          'Internal Server Error',
+        ),
+      ),
+    );
+
+    await expect(
+      fetchLivekitToken('patient-123', 'https://openmrs.example/livekit/token', 'openmrs-voice-', {
+        doctorLanguage: 'en',
+        patientLanguage: 'en',
+        agentVoiceLanguage: 'en',
+      }),
+    ).rejects.toThrow(
+      'Token request failed: 500 Internal Server Error - livekit_metadata_error: LiveKit room metadata create failed: Room service returned 500',
+    );
+  });
+
+  it('reports non-JSON token errors without leaking an HTML page', async () => {
+    stubBrowserLocation('https://openmrs.example/spa/home');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('<!doctype html><title>Bad Gateway</title>', {
+          status: 502,
+          statusText: 'Bad Gateway',
+        }),
+      ),
+    );
+
+    await expect(
+      fetchLivekitToken('patient-123', 'https://openmrs.example/livekit/token', 'openmrs-voice-', {
+        doctorLanguage: 'en',
+        patientLanguage: 'en',
+        agentVoiceLanguage: 'en',
+      }),
+    ).rejects.toThrow('Token request failed: 502 Bad Gateway - non-JSON response from token server');
+  });
+
+  it('includes JSON error details when saving an OpenMRS draft fails', async () => {
+    stubBrowserLocation('https://openmrs.example/spa/home');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            code: 'openmrs_draft_config_missing',
+            message: 'OPENMRS_ENCOUNTER_TYPE_UUID is required',
+          },
+          409,
+          'Conflict',
+        ),
+      ),
+    );
+
+    await expect(
+      saveOpenmrsDraft('https://openmrs.example/livekit/token', {
+        patientUuid: 'patient-123',
+        draft: {
+          chiefComplaint: 'Cough',
+          symptoms: ['cough'],
+          medicationsMentioned: [],
+          allergiesMentioned: [],
+          assessmentNotes: 'Needs review.',
+          patientInstructions: 'Return if worse.',
+        },
+      }),
+    ).rejects.toThrow(
+      'Draft save failed: 409 Conflict - openmrs_draft_config_missing: OPENMRS_ENCOUNTER_TYPE_UUID is required',
+    );
+  });
 });
 
 function stubBrowserLocation(href: string) {
@@ -90,5 +173,13 @@ function stubBrowserLocation(href: string) {
       hostname: url.hostname,
       protocol: url.protocol,
     },
+  });
+}
+
+function jsonResponse(payload: unknown, status: number, statusText: string): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    statusText,
+    headers: { 'Content-Type': 'application/json' },
   });
 }
