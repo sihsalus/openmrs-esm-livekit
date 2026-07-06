@@ -46,6 +46,9 @@ services:
       LIVEKIT_ROOM_PREFIX: openmrs-voice-
       LIVEKIT_HTTP_URL: http://livekit:7880
       LIVEKIT_AGENT_HEALTH_URL: http://livekit-agent-cpu:8000/metrics
+      LIVEKIT_AGENT_LLM_PROVIDER: ${LIVEKIT_AGENT_LLM_PROVIDER:-ollama}
+      LIVEKIT_AGENT_STT_PROVIDER: ${LIVEKIT_AGENT_STT_PROVIDER:-whisper}
+      LIVEKIT_AGENT_TTS_PROVIDER: ${LIVEKIT_AGENT_TTS_PROVIDER:-piper}
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
       OPENMRS_BASE_URL: http://backend:8080/openmrs
@@ -71,15 +74,15 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}
       LIVEKIT_ROOM_PREFIX: openmrs-voice-
-      LLM_PROVIDER: ollama
+      LLM_PROVIDER: ${LIVEKIT_AGENT_LLM_PROVIDER:-ollama}
       OLLAMA_BASE_URL: http://ollama:11434/v1
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
-      STT_PROVIDER: whisper
+      STT_PROVIDER: ${LIVEKIT_AGENT_STT_PROVIDER:-whisper}
       STT_LANGUAGE: en
       WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-base}
       WHISPER_COMPUTE_TYPE: int8
       WHISPER_BEAM_SIZE: '3'
-      TTS_PROVIDER: piper
+      TTS_PROVIDER: ${LIVEKIT_AGENT_TTS_PROVIDER:-piper}
       TTS_LANGUAGE: en
       PIPER_BINARY: /srv/piper/piper/piper
       PIPER_MODEL_PATH_ES: /srv/piper/voices/es_MX-claude-high.onnx

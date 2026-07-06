@@ -33,7 +33,6 @@ import {
   checkingHealth,
   initialHealth,
   normalizeTokenServerHealth,
-  resolveEmbeddedCapabilityStatus,
   type ServiceHealth,
   type ServiceStatus,
 } from './agent-health';
@@ -770,24 +769,25 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       detail: t('openmrsDraftDetail', 'Compile an anonymized, clinician-reviewable encounter draft.'),
     },
   ];
-  const effectiveAgentHealth: ServiceStatus = health.agent === 'ok' ? 'ok' : agentHealth;
-  const sttCapabilityStatus = resolveEmbeddedCapabilityStatus(health.stt, effectiveAgentHealth);
-  const ttsCapabilityStatus = resolveEmbeddedCapabilityStatus(health.tts, effectiveAgentHealth);
   const aiCapabilityPendingLabel = t('activeViaAgent', 'Active via agent');
   const sttHealthDetail =
-    health.stt === 'pending' && effectiveAgentHealth === 'ok'
+    health.sttSource === 'agent'
       ? t(
-          'sttAgentPipelineDetail',
-          'Dedicated STT endpoint is pending; Whisper STT is configured in the connected LiveKit agent.',
+          'sttAgentCapabilityDetail',
+          'Speech-to-text is provided by the LiveKit agent, not the helper /stt endpoint.',
         )
-      : undefined;
+      : t('sttHelperCapabilityDetail', 'Optional helper /stt endpoint for smoke tests.');
   const ttsHealthDetail =
-    health.tts === 'pending' && effectiveAgentHealth === 'ok'
+    health.ttsSource === 'agent'
       ? t(
-          'ttsAgentPipelineDetail',
-          'Dedicated TTS endpoint is pending; Piper TTS is configured in the connected LiveKit agent.',
+          'ttsAgentCapabilityDetail',
+          'Text-to-speech is provided by the LiveKit agent, not the helper /tts endpoint.',
         )
-      : undefined;
+      : t('ttsHelperCapabilityDetail', 'Optional helper /tts endpoint for smoke tests.');
+  const llmHealthDetail =
+    health.llmSource === 'agent'
+      ? t('llmAgentCapabilityDetail', 'Clinical drafting and tool calls are provided by the LiveKit agent.')
+      : t('llmHelperCapabilityDetail', 'Helper parser status for smoke tests and draft fallback.');
 
   return (
     <div className={styles.session}>
@@ -1118,25 +1118,34 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                 <ul className={styles.healthList}>
                   <HealthRow
                     label="STT"
-                    status={sttCapabilityStatus}
+                    status={health.stt}
                     detail={sttHealthDetail}
                     statusText={
-                      health.stt === 'pending' && sttCapabilityStatus === 'ok'
+                      health.sttSource === 'agent' && health.stt === 'ok'
                         ? aiCapabilityPendingLabel
                         : undefined
                     }
                   />
                   <HealthRow
                     label="TTS"
-                    status={ttsCapabilityStatus}
+                    status={health.tts}
                     detail={ttsHealthDetail}
                     statusText={
-                      health.tts === 'pending' && ttsCapabilityStatus === 'ok'
+                      health.ttsSource === 'agent' && health.tts === 'ok'
                         ? aiCapabilityPendingLabel
                         : undefined
                     }
                   />
-                  <HealthRow label="LLM" status={health.llm} />
+                  <HealthRow
+                    label="LLM"
+                    status={health.llm}
+                    detail={llmHealthDetail}
+                    statusText={
+                      health.llmSource === 'agent' && health.llm === 'ok'
+                        ? aiCapabilityPendingLabel
+                        : undefined
+                    }
+                  />
                 </ul>
               </div>
               <div className={styles.healthGroup}>

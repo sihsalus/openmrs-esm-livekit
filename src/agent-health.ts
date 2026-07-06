@@ -1,4 +1,5 @@
 export type ServiceStatus = 'ok' | 'error' | 'pending' | 'checking';
+export type CapabilitySource = 'agent' | 'helper' | 'unknown';
 
 export interface ServiceHealth {
   livekit: ServiceStatus;
@@ -7,8 +8,11 @@ export interface ServiceHealth {
   openmrs: ServiceStatus;
   openmrsDraftWrite: ServiceStatus;
   stt: ServiceStatus;
+  sttSource: CapabilitySource;
   tts: ServiceStatus;
+  ttsSource: CapabilitySource;
   llm: ServiceStatus;
+  llmSource: CapabilitySource;
   productionReadiness: ServiceStatus;
   cors: ServiceStatus;
   localStorage: ServiceStatus;
@@ -21,8 +25,11 @@ export const initialHealth: ServiceHealth = {
   openmrs: 'pending',
   openmrsDraftWrite: 'pending',
   stt: 'pending',
+  sttSource: 'unknown',
   tts: 'pending',
+  ttsSource: 'unknown',
   llm: 'pending',
+  llmSource: 'unknown',
   productionReadiness: 'pending',
   cors: 'pending',
   localStorage: 'pending',
@@ -36,8 +43,11 @@ export function checkingHealth(): ServiceHealth {
     openmrs: 'checking',
     openmrsDraftWrite: 'checking',
     stt: 'checking',
+    sttSource: 'unknown',
     tts: 'checking',
+    ttsSource: 'unknown',
     llm: 'checking',
+    llmSource: 'unknown',
     productionReadiness: 'checking',
     cors: 'checking',
     localStorage: 'checking',
@@ -50,17 +60,27 @@ export function normalizeTokenServerHealth(payload: unknown): ServiceHealth | nu
   }
 
   const services = payload.services;
+  const agentCapabilities = isRecord(services.agentCapabilities) ? services.agentCapabilities : {};
+  const agentSttStatus = serviceStatus(agentCapabilities.stt);
+  const helperSttStatus = serviceStatus(services.stt);
+  const agentTtsStatus = serviceStatus(agentCapabilities.tts);
+  const helperTtsStatus = serviceStatus(services.tts);
+  const agentLlmStatus = serviceStatus(agentCapabilities.llm);
+  const helperLlmStatus =
+    serviceStatus(services.llm) ?? serviceStatus(services.ollama) ?? serviceStatus(services.parser);
+
   return {
     livekit: serviceHealthToStatus(serviceStatus(services.livekit)),
     tokenServer: serviceHealthToStatus(serviceStatus(services.tokenServer)),
     agent: serviceHealthToStatus(serviceStatus(services.agent) ?? serviceStatus(services.livekitAgent)),
     openmrs: serviceHealthToStatus(serviceStatus(services.openmrs)),
     openmrsDraftWrite: serviceHealthToStatus(serviceStatus(services.openmrsDraftWrite)),
-    stt: serviceHealthToStatus(serviceStatus(services.stt)),
-    tts: serviceHealthToStatus(serviceStatus(services.tts)),
-    llm: serviceHealthToStatus(
-      serviceStatus(services.llm) ?? serviceStatus(services.ollama) ?? serviceStatus(services.parser),
-    ),
+    stt: serviceHealthToStatus(agentSttStatus ?? helperSttStatus),
+    sttSource: capabilitySource(agentSttStatus, helperSttStatus),
+    tts: serviceHealthToStatus(agentTtsStatus ?? helperTtsStatus),
+    ttsSource: capabilitySource(agentTtsStatus, helperTtsStatus),
+    llm: serviceHealthToStatus(agentLlmStatus ?? helperLlmStatus),
+    llmSource: capabilitySource(agentLlmStatus, helperLlmStatus),
     productionReadiness: serviceHealthToStatus(serviceStatus(services.productionReadiness)),
     cors: serviceHealthToStatus(serviceStatus(services.cors)),
     localStorage: serviceHealthToStatus(serviceStatus(services.localStorage)),
@@ -77,11 +97,14 @@ export function serviceHealthToStatus(status: unknown): ServiceStatus {
   return 'pending';
 }
 
-export function resolveEmbeddedCapabilityStatus(
-  capability: ServiceStatus,
-  agent: ServiceStatus,
-): ServiceStatus {
-  return capability === 'pending' && agent === 'ok' ? 'ok' : capability;
+function capabilitySource(agentStatus: unknown, helperStatus: unknown): CapabilitySource {
+  if (agentStatus) {
+    return 'agent';
+  }
+  if (helperStatus) {
+    return 'helper';
+  }
+  return 'unknown';
 }
 
 function serviceStatus(service: unknown): unknown {

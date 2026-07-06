@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  normalizeTokenServerHealth,
-  resolveEmbeddedCapabilityStatus,
-  serviceHealthToStatus,
-} from './agent-health';
+import { normalizeTokenServerHealth, serviceHealthToStatus } from './agent-health';
 
 describe('agent health normalization', () => {
   it('maps helper service statuses into frontend status tags', () => {
@@ -43,8 +39,11 @@ describe('agent health normalization', () => {
       openmrs: 'ok',
       openmrsDraftWrite: 'ok',
       stt: 'ok',
+      sttSource: 'helper',
       tts: 'ok',
+      ttsSource: 'helper',
       llm: 'ok',
+      llmSource: 'helper',
       productionReadiness: 'ok',
       cors: 'ok',
       localStorage: 'ok',
@@ -70,8 +69,11 @@ describe('agent health normalization', () => {
       openmrs: 'error',
       openmrsDraftWrite: 'pending',
       stt: 'pending',
+      sttSource: 'helper',
       tts: 'ok',
+      ttsSource: 'helper',
       llm: 'error',
+      llmSource: 'helper',
     });
 
     expect(
@@ -88,15 +90,42 @@ describe('agent health normalization', () => {
     ).toMatchObject({ llm: 'pending' });
   });
 
+  it('uses LiveKit agent capabilities before helper endpoint status', () => {
+    expect(
+      normalizeTokenServerHealth({
+        services: {
+          livekit: { status: 'ok' },
+          tokenServer: { status: 'ok' },
+          agent: { status: 'ok' },
+          openmrs: { status: 'ok' },
+          openmrsDraftWrite: { status: 'disabled' },
+          stt: { status: 'not_configured', scope: 'helper_endpoint' },
+          tts: { status: 'not_configured', scope: 'helper_endpoint' },
+          ollama: { status: 'ok' },
+          agentCapabilities: {
+            status: 'configured',
+            source: 'livekit-agent',
+            stt: { status: 'configured', provider: 'whisper', scope: 'livekit_agent' },
+            tts: { status: 'configured', provider: 'piper', scope: 'livekit_agent' },
+            llm: { status: 'configured', provider: 'ollama', scope: 'livekit_agent' },
+          },
+          productionReadiness: { status: 'demo_mode' },
+          cors: { status: 'configured' },
+          localStorage: { status: 'private_files' },
+        },
+      }),
+    ).toMatchObject({
+      stt: 'ok',
+      sttSource: 'agent',
+      tts: 'ok',
+      ttsSource: 'agent',
+      llm: 'ok',
+      llmSource: 'agent',
+    });
+  });
+
   it('rejects malformed health payloads', () => {
     expect(normalizeTokenServerHealth(null)).toBeNull();
     expect(normalizeTokenServerHealth({})).toBeNull();
-  });
-
-  it('reports embedded STT and TTS capabilities as active when the agent is healthy', () => {
-    expect(resolveEmbeddedCapabilityStatus('pending', 'ok')).toBe('ok');
-    expect(resolveEmbeddedCapabilityStatus('pending', 'checking')).toBe('pending');
-    expect(resolveEmbeddedCapabilityStatus('error', 'ok')).toBe('error');
-    expect(resolveEmbeddedCapabilityStatus('ok', 'pending')).toBe('ok');
   });
 });
