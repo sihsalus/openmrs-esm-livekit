@@ -10,6 +10,17 @@
   }
 }
 
+.buttonLabelWithIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: layout.$spacing-03;
+  white-space: nowrap;
+
+  svg {
+    flex: 0 0 auto;
+  }
+}
+
 .panel {
   padding: layout.$spacing-05;
   display: flex;
