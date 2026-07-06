@@ -55,6 +55,7 @@ import {
   type ClinicalLanguageCode,
 } from './clinical-language';
 import { shouldAttemptInitialMicrophoneEnable } from './microphone-control';
+import { mergeEncounterDraft } from './encounter-draft';
 import AudioVisualizer from './audio-visualizer.component';
 import PatientContext from './patient-context.component';
 import type { Config } from './config-schema';
@@ -513,7 +514,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     }
 
     lastAppliedAgentDraft.current = agentDraft;
-    setDraft(agentDraft);
+    setDraft((currentDraft) => mergeEncounterDraft(currentDraft, agentDraft));
     setDraftSaved(false);
     setDraftSaveMessage(null);
     setDraftSaveError(null);
@@ -718,6 +719,16 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       detail: t('openmrsDraftDetail', 'Compile an anonymized, clinician-reviewable encounter draft.'),
     },
   ];
+  const aiCapabilityPendingLabel =
+    agentHealth === 'ok' ? t('demoPipeline', 'Demo pipeline') : undefined;
+  const sttHealthDetail =
+    health.stt === 'pending' && agentHealth === 'ok'
+      ? t('sttDemoPipelineDetail', 'Dedicated STT endpoint is pending; the connected LiveKit agent demo pipeline is active.')
+      : undefined;
+  const ttsHealthDetail =
+    health.tts === 'pending' && agentHealth === 'ok'
+      ? t('ttsDemoPipelineDetail', 'Dedicated TTS endpoint is pending; the connected LiveKit agent demo pipeline is active.')
+      : undefined;
 
   return (
     <div className={styles.session}>
@@ -1028,8 +1039,18 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
               <div className={styles.healthGroup}>
                 <h6>{t('localAiCapabilities', 'Local AI capabilities')}</h6>
                 <ul className={styles.healthList}>
-                  <HealthRow label="STT" status={health.stt} />
-                  <HealthRow label="TTS" status={health.tts} />
+                  <HealthRow
+                    label="STT"
+                    status={health.stt}
+                    detail={sttHealthDetail}
+                    statusText={health.stt === 'pending' ? aiCapabilityPendingLabel : undefined}
+                  />
+                  <HealthRow
+                    label="TTS"
+                    status={health.tts}
+                    detail={ttsHealthDetail}
+                    statusText={health.tts === 'pending' ? aiCapabilityPendingLabel : undefined}
+                  />
                   <HealthRow label="LLM" status={health.llm} />
                 </ul>
               </div>
@@ -1123,10 +1144,11 @@ const PrivacyItem: React.FC<{ icon: React.ComponentType; text: string }> = ({ ic
   </li>
 );
 
-const HealthRow: React.FC<{ label: string; status: ServiceStatus; detail?: string }> = ({
+const HealthRow: React.FC<{ label: string; status: ServiceStatus; detail?: string; statusText?: string }> = ({
   label,
   status,
   detail,
+  statusText,
 }) => {
   const { t } = useTranslation();
   const statusLabel: Record<ServiceStatus, string> = {
@@ -1149,7 +1171,7 @@ const HealthRow: React.FC<{ label: string; status: ServiceStatus; detail?: strin
         {detail && <small>{detail}</small>}
       </span>
       <Tag type={tagType[status] as 'green' | 'red' | 'gray' | 'blue'} size="sm">
-        {statusLabel[status]}
+        {statusText ?? statusLabel[status]}
       </Tag>
     </li>
   );
