@@ -18,10 +18,16 @@ export const configSchema = {
     _description:
       'LiveKit room prefix. The local OpenMRS LiveKit agent currently joins only rooms with this prefix.',
   },
+  enableDemoFlow: {
+    _type: Type.Boolean,
+    _default: false,
+    _description: 'Show the synthetic demo conversation controls in the clinical voice panel.',
+  },
 };
 
 export type Config = {
   livekitServerUrl: string;
   tokenEndpoint: string;
   roomPrefix: string;
+  enableDemoFlow: boolean;
 };

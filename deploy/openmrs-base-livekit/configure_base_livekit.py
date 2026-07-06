@@ -28,7 +28,7 @@ def update_frontend() -> None:
     config = json.loads(config_path.read_text())
     config["@sihsalus/esm-livekit-app"] = {
         "livekitServerUrl": FRONTEND_LIVEKIT_SERVER_URL,
-        "tokenEndpoint": "/livekit/token",
+        "tokenEndpoint": "/openmrs/livekit/token",
         "roomPrefix": "openmrs-voice-",
     }
     config_path.write_text(json.dumps(config, indent=2) + "\n")
@@ -63,6 +63,12 @@ def update_gateway() -> None:
     proxy_pass $token_server;
   }
 """
+    openmrs_livekit_location = """  location /openmrs/livekit/ {
+    set $token_server http://${LIVEKIT_TOKEN_HOST}:7890;
+    rewrite ^/openmrs/livekit/(.*)$ /$1 break;
+    proxy_pass $token_server;
+  }
+"""
     livekit_sfu_location = """  location /livekit-sfu/ {
     set $livekit_server http://livekit:7880;
     rewrite ^/livekit-sfu/(.*)$ /$1 break;
@@ -82,6 +88,9 @@ def update_gateway() -> None:
             text = text.replace(old_location, new_location, 1)
         elif "location /livekit/" not in text:
             text = text.replace("  location = / {", new_location + "\n  location = / {", 1)
+
+        if "location /openmrs/livekit/" not in text:
+            text = text.replace("  location = / {", openmrs_livekit_location + "\n  location = / {", 1)
 
         if "location /livekit-sfu/" not in text:
             text = text.replace("  location = / {", livekit_sfu_location + "\n  location = / {", 1)

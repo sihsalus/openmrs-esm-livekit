@@ -13,6 +13,7 @@ export interface ServiceHealth {
   ttsSource: CapabilitySource;
   llm: ServiceStatus;
   llmSource: CapabilitySource;
+  tokenServerAuth: ServiceStatus;
   productionReadiness: ServiceStatus;
   cors: ServiceStatus;
   localStorage: ServiceStatus;
@@ -30,6 +31,7 @@ export const initialHealth: ServiceHealth = {
   ttsSource: 'unknown',
   llm: 'pending',
   llmSource: 'unknown',
+  tokenServerAuth: 'pending',
   productionReadiness: 'pending',
   cors: 'pending',
   localStorage: 'pending',
@@ -48,6 +50,7 @@ export function checkingHealth(): ServiceHealth {
     ttsSource: 'unknown',
     llm: 'checking',
     llmSource: 'unknown',
+    tokenServerAuth: 'checking',
     productionReadiness: 'checking',
     cors: 'checking',
     localStorage: 'checking',
@@ -81,6 +84,7 @@ export function normalizeTokenServerHealth(payload: unknown): ServiceHealth | nu
     ttsSource: capabilitySource(agentTtsStatus, helperTtsStatus),
     llm: serviceHealthToStatus(agentLlmStatus ?? helperLlmStatus),
     llmSource: capabilitySource(agentLlmStatus, helperLlmStatus),
+    tokenServerAuth: serviceHealthToStatus(serviceStatus(services.tokenServerAuth)),
     productionReadiness: serviceHealthToStatus(serviceStatus(services.productionReadiness)),
     cors: serviceHealthToStatus(serviceStatus(services.cors)),
     localStorage: serviceHealthToStatus(serviceStatus(services.localStorage)),
