@@ -5,6 +5,8 @@
   "connecting": "Conectando...",
   "connected": "Conectado",
   "recording": "Grabando",
+  "microphone": "Micrófono",
+  "muted": "Silenciado",
   "disconnected": "Desconectado",
   "mute": "Silenciar",
   "unmute": "Activar micrófono",

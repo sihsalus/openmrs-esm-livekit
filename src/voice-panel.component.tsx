@@ -689,7 +689,14 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       {draftSaveError && <p className={styles.error}>{draftSaveError}</p>}
 
       {/* ---- Audio visualizer ---- */}
-      {!muted && <AudioVisualizer width={280} height={40} barCount={32} className={styles.visualizer} />}
+      <AudioVisualizer
+        barCount={24}
+        className={styles.visualizer}
+        label={t('microphone', 'Microphone')}
+        muted={muted}
+        mutedLabel={t('muted', 'Muted')}
+        activeLabel={t('recording', 'Recording')}
+      />
       {agentStatus && <p className={styles.agentStatus}>{agentStatus}</p>}
 
       {/* ---- Controls ---- */}

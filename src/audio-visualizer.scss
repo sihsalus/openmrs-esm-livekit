@@ -1,0 +1,18 @@
+@use '@carbon/layout';
+
+.audioMeter {
+  display: grid;
+  gap: layout.$spacing-03;
+  width: min(22rem, 100%);
+}
+
+.audioMeterHeader {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: layout.$spacing-03;
+}
+
+.audioMeterProgress {
+  margin: 0;
+}
