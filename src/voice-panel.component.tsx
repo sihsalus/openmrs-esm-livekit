@@ -181,9 +181,15 @@ function formatEndpointForDisplay(endpoint: string): string {
 }
 
 const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChange }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const config = useConfig<Config>();
   const { patient, isLoading: patientLoading } = usePatient();
+  const localeKey = `${i18n.resolvedLanguage || ''}|${i18n.language || ''}|${i18n.languages?.join(',') || ''}`;
+  const defaultLanguages = useMemo(
+    () => clinicalLanguageDefaultsFromOpenmrsLocale(i18n),
+    [i18n, localeKey],
+  );
+  const languageSelectionTouched = useRef(false);
   const livekitServerUrl = useMemo(
     () => resolveLivekitServerUrl(config.livekitServerUrl),
     [config.livekitServerUrl],
@@ -195,6 +201,27 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   const [roomName, setRoomName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [doctorLanguage, setDoctorLanguage] = useState<LanguageCode>(defaultLanguages.doctorLanguage);
+  const [patientLanguage, setPatientLanguage] = useState<LanguageCode>(defaultLanguages.patientLanguage);
+
+  useEffect(() => {
+    if (languageSelectionTouched.current) {
+      return;
+    }
+
+    setDoctorLanguage(defaultLanguages.doctorLanguage);
+    setPatientLanguage(defaultLanguages.patientLanguage);
+  }, [defaultLanguages.doctorLanguage, defaultLanguages.patientLanguage]);
+
+  const updateDoctorLanguage = useCallback((language: LanguageCode) => {
+    languageSelectionTouched.current = true;
+    setDoctorLanguage(language);
+  }, []);
+
+  const updatePatientLanguage = useCallback((language: LanguageCode) => {
+    languageSelectionTouched.current = true;
+    setPatientLanguage(language);
+  }, []);
 
   const connect = useCallback(async () => {
     if (!patient?.id) {
@@ -204,7 +231,10 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
     setConnecting(true);
     setError(null);
     try {
-      const result = await fetchLivekitToken(patient.id, tokenEndpoint, roomPrefix);
+      const result = await fetchLivekitToken(patient.id, tokenEndpoint, roomPrefix, {
+        doctorLanguage,
+        patientLanguage,
+      });
       setToken(result.token);
       setRoomName(result.roomName);
     } catch (e) {
@@ -219,7 +249,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
     } finally {
       setConnecting(false);
     }
-  }, [patient?.id, roomPrefix, t, tokenEndpoint]);
+  }, [doctorLanguage, patient?.id, patientLanguage, roomPrefix, t, tokenEndpoint]);
 
   const disconnect = useCallback(() => {
     setToken(null);
@@ -293,6 +323,29 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
               {t('openmrsDraft', 'OpenMRS draft')}
             </Tag>
           </div>
+          <div className={styles.roomLanguageConfig}>
+            <div>
+              <h6>{t('agentRoomLanguages', 'Agent room languages')}</h6>
+              <p>
+                {t(
+                  'agentRoomLanguagesDetail',
+                  'These values are written to LiveKit room metadata before the agent joins. They do not identify speakers automatically.',
+                )}
+              </p>
+            </div>
+            <div className={styles.languageControls}>
+              <LanguageToggle
+                label={t('doctorLanguage', 'Doctor language')}
+                value={doctorLanguage}
+                onChange={updateDoctorLanguage}
+              />
+              <LanguageToggle
+                label={t('patientLanguage', 'Patient language')}
+                value={patientLanguage}
+                onChange={updatePatientLanguage}
+              />
+            </div>
+          </div>
           <dl className={styles.connectionDetails}>
             <div>
               <dt>{t('livekitServer', 'LiveKit')}</dt>
@@ -362,6 +415,8 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
         onEnd={disconnect}
         livekitUrl={livekitServerUrl}
         tokenEndpoint={tokenEndpoint}
+        doctorLanguage={doctorLanguage}
+        patientLanguage={patientLanguage}
       />
     </LiveKitRoom>
   );
@@ -378,6 +433,8 @@ interface ActiveSessionProps {
   onEnd: () => void;
   livekitUrl: string;
   tokenEndpoint: string;
+  doctorLanguage: LanguageCode;
+  patientLanguage: LanguageCode;
 }
 
 const ActiveSession: React.FC<ActiveSessionProps> = ({
@@ -387,22 +444,16 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   onEnd,
   livekitUrl,
   tokenEndpoint,
+  doctorLanguage,
+  patientLanguage,
 }) => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const connectionState = useConnectionState();
   const { localParticipant } = useLocalParticipant();
-  const localeKey = `${i18n.resolvedLanguage || ''}|${i18n.language || ''}|${i18n.languages?.join(',') || ''}`;
-  const defaultLanguages = useMemo(
-    () => clinicalLanguageDefaultsFromOpenmrsLocale(i18n),
-    [i18n, localeKey],
-  );
-  const languageSelectionTouched = useRef(false);
   const [muted, setMuted] = useState(true);
   const [micError, setMicError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [agentWaitSeconds, setAgentWaitSeconds] = useState(0);
-  const [doctorLanguage, setDoctorLanguage] = useState<LanguageCode>(defaultLanguages.doctorLanguage);
-  const [patientLanguage, setPatientLanguage] = useState<LanguageCode>(defaultLanguages.patientLanguage);
   const [stepStatus, setStepStatus] = useState<Record<FlowStep, StepStatus>>(initialStepStatus);
   const [demoRunning, setDemoRunning] = useState(false);
   const [redactedTranscript, setRedactedTranscript] = useState('');
@@ -423,25 +474,6 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     agentError,
     clearTranscripts,
   } = useAgentData();
-
-  useEffect(() => {
-    if (languageSelectionTouched.current) {
-      return;
-    }
-
-    setDoctorLanguage(defaultLanguages.doctorLanguage);
-    setPatientLanguage(defaultLanguages.patientLanguage);
-  }, [defaultLanguages.doctorLanguage, defaultLanguages.patientLanguage]);
-
-  const updateDoctorLanguage = useCallback((language: LanguageCode) => {
-    languageSelectionTouched.current = true;
-    setDoctorLanguage(language);
-  }, []);
-
-  const updatePatientLanguage = useCallback((language: LanguageCode) => {
-    languageSelectionTouched.current = true;
-    setPatientLanguage(language);
-  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => setElapsed((e) => e + 1), 1000);
@@ -829,17 +861,29 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           </Button>
         </div>
 
-        <div className={styles.languageControls}>
-          <LanguageToggle
-            label={t('doctorLanguage', 'Doctor language')}
-            value={doctorLanguage}
-            onChange={updateDoctorLanguage}
-          />
-          <LanguageToggle
-            label={t('patientLanguage', 'Patient language')}
-            value={patientLanguage}
-            onChange={updatePatientLanguage}
-          />
+        <div className={styles.roomLanguageSummary}>
+          <span>{t('roomLanguageMetadata', 'Room language metadata')}</span>
+          <div className={styles.roomLanguageTags}>
+            <Tag type="blue" size="sm">
+              {t('doctorLanguageValue', 'Doctor: {{language}}', {
+                language: doctorLanguageLabel,
+              })}
+            </Tag>
+            <Tag type="cyan" size="sm">
+              {t('patientLanguageValue', 'Patient: {{language}}', {
+                language: patientLanguageLabel,
+              })}
+            </Tag>
+            <Tag type="gray" size="sm">
+              {t('fixedForRoom', 'Fixed for room')}
+            </Tag>
+          </div>
+          <p>
+            {t(
+              'roomLanguageMetadataDetail',
+              'The agent received these values before joining. Speaker role detection still depends on the capture flow.',
+            )}
+          </p>
         </div>
 
         <div className={styles.stepList}>

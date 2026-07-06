@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildRoomName,
+  fetchLivekitToken,
   resolveLivekitServerUrl,
   resolveTokenEndpoint,
   resolveTokenServerPath,
@@ -47,6 +48,32 @@ describe('LiveKit token endpoint transport', () => {
 
   it('uses a clinical OpenMRS room prefix when none is configured', () => {
     expect(buildRoomName('patient/uuid', '')).toBe('openmrs-voice-patient-uuid');
+  });
+
+  it('sends selected clinical languages when requesting a room token', async () => {
+    stubBrowserLocation('https://openmrs.example/spa/home');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: 'signed-token', roomName: 'openmrs-voice-patient-123' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchLivekitToken('patient-123', 'https://openmrs.example/livekit/token', 'openmrs-voice-', {
+        doctorLanguage: 'es',
+        patientLanguage: 'en',
+      }),
+    ).resolves.toEqual({ token: 'signed-token', roomName: 'openmrs-voice-patient-123' });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const requestBody = JSON.parse(init.body as string);
+    expect(requestBody).toEqual({
+      patientUuid: 'patient-123',
+      roomName: 'openmrs-voice-patient-123',
+      roomPrefix: 'openmrs-voice-',
+      doctorLanguage: 'es',
+      patientLanguage: 'en',
+    });
   });
 });
 

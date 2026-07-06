@@ -37,6 +37,8 @@ DEFAULT_DEV_API_KEY = "devkey"
 DEFAULT_DEV_API_SECRET = "secret"
 PRODUCTION_ENVIRONMENTS = {"production", "prod", "staging", "shared"}
 LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "::1", "[::1]"}
+SUPPORTED_CLINICAL_LANGUAGES = {"en", "es"}
+DEFAULT_CLINICAL_LANGUAGE = "es"
 
 
 def env_flag(name: str) -> bool:
@@ -185,14 +187,28 @@ class TokenHandler(BaseHTTPRequestHandler):
         room_name = sanitize_room_part(room_name)
         if not room_name.startswith(room_prefix):
             room_name = f"{room_prefix}{sanitize_room_part(room_name)}"
+        doctor_language = sanitize_language_code(
+            body.get("doctorLanguage"), DEFAULT_CLINICAL_LANGUAGE
+        )
+        patient_language = sanitize_language_code(body.get("patientLanguage"), doctor_language)
         identity = f"clinician-{int(time.time())}"
 
-        room_metadata = build_room_metadata(patient_uuid, room_prefix)
+        room_metadata = build_room_metadata(
+            patient_uuid,
+            room_prefix,
+            doctor_language,
+            patient_language,
+        )
         metadata_result = sync_livekit_room_metadata(room_name, room_metadata)
         token = create_token(
             room_name,
             identity,
-            {"role": "clinician", "patientUuid": patient_uuid},
+            {
+                "role": "clinician",
+                "patientUuid": patient_uuid,
+                "doctorLanguage": doctor_language,
+                "patientLanguage": patient_language,
+            },
         )
         self._send_json(
             {"token": token, "roomName": room_name, "roomMetadata": metadata_result}
@@ -251,10 +267,27 @@ def sanitize_room_prefix(value: str) -> str:
     return prefix or ROOM_PREFIX
 
 
-def build_room_metadata(patient_uuid: str, room_prefix: str) -> dict:
+def sanitize_language_code(value: object, fallback: str = DEFAULT_CLINICAL_LANGUAGE) -> str:
+    normalized = str(value or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    if normalized in SUPPORTED_CLINICAL_LANGUAGES:
+        return normalized
+    return fallback if fallback in SUPPORTED_CLINICAL_LANGUAGES else DEFAULT_CLINICAL_LANGUAGE
+
+
+def build_room_metadata(
+    patient_uuid: str,
+    room_prefix: str,
+    doctor_language: str = DEFAULT_CLINICAL_LANGUAGE,
+    patient_language: str = DEFAULT_CLINICAL_LANGUAGE,
+) -> dict:
+    doctor_language = sanitize_language_code(doctor_language, DEFAULT_CLINICAL_LANGUAGE)
+    patient_language = sanitize_language_code(patient_language, doctor_language)
     return {
         "patientUuid": patient_uuid,
         "roomPrefix": room_prefix,
+        "doctorLanguage": doctor_language,
+        "patientLanguage": patient_language,
+        "languageMode": "bilingual" if doctor_language != patient_language else "single-language",
         "source": "openmrs-livekit-token-server",
     }
 
@@ -381,7 +414,7 @@ def livekit_room_metadata_status() -> dict:
     return {
         "status": "configured" if LIVEKIT_HTTP_URL else "disabled",
         "livekitHttpUrlConfigured": bool(LIVEKIT_HTTP_URL),
-        "contract": "Best-effort LiveKit room metadata with patientUuid and roomPrefix",
+        "contract": "Best-effort LiveKit room metadata with patientUuid, roomPrefix, doctorLanguage, and patientLanguage",
     }
 
 

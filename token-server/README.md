@@ -135,9 +135,19 @@ The metadata payload intentionally stays minimal:
 {
   "patientUuid": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
   "roomPrefix": "openmrs-voice-",
+  "doctorLanguage": "es",
+  "patientLanguage": "en",
+  "languageMode": "bilingual",
   "source": "openmrs-livekit-token-server"
 }
 ```
+
+`doctorLanguage` and `patientLanguage` are normalized to the supported base
+codes `en` and `es`. Locale-shaped values such as `es-PE` are accepted and
+stored as `es`; unsupported patient languages fall back to the normalized
+clinician language. These fields configure the room and initial agent behavior;
+they are not speaker diarization and do not identify who is talking from a
+shared microphone.
 
 If the LiveKit room already exists, the helper updates room metadata instead of
 failing the token request. If metadata sync fails, `/token` still returns the
@@ -147,7 +157,9 @@ continue while logs expose the missing metadata path.
 ```json
 {
   "patientUuid": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
-  "roomPrefix": "openmrs-voice-"
+  "roomPrefix": "openmrs-voice-",
+  "doctorLanguage": "es",
+  "patientLanguage": "en"
 }
 ```
 

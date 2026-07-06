@@ -335,7 +335,12 @@ class TokenServerE2ETest(unittest.TestCase):
         payload, _response = request_json(
             self.base_url,
             "/token",
-            {"patientUuid": "patient-123", "roomPrefix": "openmrs-room-"},
+            {
+                "patientUuid": "patient-123",
+                "roomPrefix": "openmrs-room-",
+                "doctorLanguage": "es",
+                "patientLanguage": "en",
+            },
         )
         token = payload["token"]
         header_part, claims_part, signature_part = token.split(".")
@@ -354,7 +359,10 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(claims["iss"], "test-key")
         self.assertEqual(claims["video"]["room"], payload["roomName"])
         self.assertEqual(claims["video"]["roomJoin"], True)
-        self.assertEqual(json.loads(claims["metadata"])["patientUuid"], "patient-123")
+        participant_metadata = json.loads(claims["metadata"])
+        self.assertEqual(participant_metadata["patientUuid"], "patient-123")
+        self.assertEqual(participant_metadata["doctorLanguage"], "es")
+        self.assertEqual(participant_metadata["patientLanguage"], "en")
         self.assertEqual(signature_part, expected_signature)
         self.assertNotIn("test-secret", token)
         self.assertEqual(payload["roomMetadata"]["status"], "ok")
@@ -367,6 +375,34 @@ class TokenServerE2ETest(unittest.TestCase):
         room_metadata = json.loads(room_request["payload"]["metadata"])
         self.assertEqual(room_metadata["patientUuid"], "patient-123")
         self.assertEqual(room_metadata["roomPrefix"], "openmrs-room-")
+        self.assertEqual(room_metadata["doctorLanguage"], "es")
+        self.assertEqual(room_metadata["patientLanguage"], "en")
+        self.assertEqual(room_metadata["languageMode"], "bilingual")
+
+    def test_token_normalizes_unsupported_language_metadata(self):
+        FakeLiveKitHandler.room_requests = []
+        payload, _response = request_json(
+            self.base_url,
+            "/token",
+            {
+                "patientUuid": "patient-456",
+                "roomPrefix": "openmrs-room-",
+                "doctorLanguage": "es-PE",
+                "patientLanguage": "fr",
+            },
+        )
+
+        token = payload["token"]
+        _header_part, claims_part, _signature_part = token.split(".")
+        claims = decode_jwt_json(claims_part)
+        participant_metadata = json.loads(claims["metadata"])
+        self.assertEqual(participant_metadata["doctorLanguage"], "es")
+        self.assertEqual(participant_metadata["patientLanguage"], "es")
+
+        room_metadata = json.loads(FakeLiveKitHandler.room_requests[0]["payload"]["metadata"])
+        self.assertEqual(room_metadata["doctorLanguage"], "es")
+        self.assertEqual(room_metadata["patientLanguage"], "es")
+        self.assertEqual(room_metadata["languageMode"], "single-language")
 
     def test_compile_encounter_redacts_phi_and_uses_local_ollama_contract(self):
         payload, _response = request_json(

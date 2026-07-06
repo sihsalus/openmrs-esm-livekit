@@ -136,7 +136,7 @@ Room metadata validation:
 docker logs openmrs-distro-referenceapplication-livekit-helper-1 \
   | grep -E "LiveKit room metadata (created|updated)"
 docker logs openmrs-distro-referenceapplication-livekit-agent-cpu-1 \
-  | grep -E "Metadata parsed|Room metadata derived from room name|Room metadata empty"
+  | grep -E "Metadata parsed|Room metadata derived from room name|Room metadata empty|Sending initial greeting"
 ```
 
 Expected result:
@@ -144,11 +144,17 @@ Expected result:
 - Helper logs `LiveKit room metadata created` or `updated` for rooms opened
   from the OpenMRS microfrontend when `LIVEKIT_HTTP_URL` is configured.
 - Agent logs `Metadata parsed` when LiveKit room metadata is available.
+- The helper room metadata includes normalized `doctorLanguage`,
+  `patientLanguage`, and `languageMode`. The agent uses `doctorLanguage` for
+  the initial greeting and data-channel transcript language labels.
 - Agent may log `Room metadata derived from room name` as a non-blocking
   fallback for rooms named with the configured prefix, for example
   `openmrs-voice-<patientUuid>`.
 - `Room metadata empty` should only appear for rooms that do not match the
   configured agent room prefix or cannot expose a patient UUID safely.
+- These language fields are room configuration, not automatic speaker
+  diarization. A shared microphone still cannot reliably distinguish clinician
+  and patient roles without an explicit capture flow or separate participants.
 
 OpenMRS base FHIR MedicationRequest validation:
 
