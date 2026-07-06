@@ -82,6 +82,59 @@ export interface OpenmrsDraftResult {
   message?: string;
 }
 
+export interface OpenmrsDraftConfigResource {
+  uuid?: string | null;
+  display?: string | null;
+  name?: string | null;
+  status?: string;
+  datatype?: string | null;
+  conceptClass?: string | null;
+  retired?: boolean | null;
+  httpStatus?: number | null;
+  validationErrors?: string[];
+}
+
+export interface OpenmrsDraftWriteConfig {
+  status: 'validated' | 'invalid' | 'not_configured' | 'auth_required' | 'disabled' | 'error';
+  enabled: boolean;
+  restBase?: string;
+  authSource?: string;
+  requiredConfiguration?: string[];
+  requiredRequestContext?: string[];
+  values?: Record<string, string | null>;
+  resources?: {
+    encounterType?: OpenmrsDraftConfigResource;
+    location?: OpenmrsDraftConfigResource;
+    draftObsConcept?: OpenmrsDraftConfigResource;
+  };
+  validationErrors?: string[];
+  rawClinicalTextStored?: boolean;
+  message?: string;
+}
+
+export interface OpenmrsDraftAuditEvent {
+  id?: string;
+  createdAt?: number;
+  eventType?: string;
+  draftId?: string;
+  patientHash?: string | null;
+  writeRequested?: boolean;
+  writeEnabled?: boolean;
+  openmrsWrite?: string;
+  encounterUuid?: string | null;
+  authSource?: string;
+  message?: string;
+  rawClinicalTextStored?: boolean;
+}
+
+export interface OpenmrsDraftAuditResponse {
+  status: 'ok' | 'error';
+  limit?: number;
+  events: OpenmrsDraftAuditEvent[];
+  rawClinicalTextStored?: boolean;
+  message?: string;
+}
+
 export function buildQueuedOpenmrsDraftPayload(
   payload: Omit<OpenmrsDraftPayload, 'writeToOpenmrs'>,
 ): OpenmrsDraftPayload {
@@ -116,6 +169,37 @@ export async function saveOpenmrsDraft(
   }
 
   return readJsonResponse<OpenmrsDraftResult>(res, 'Draft save response was not valid JSON');
+}
+
+export async function fetchOpenmrsDraftWriteConfig(tokenEndpoint: string): Promise<OpenmrsDraftWriteConfig> {
+  const res = await fetch(resolveTokenServerPath(tokenEndpoint, '/openmrs/draft/config'), {
+    method: 'GET',
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    throw new Error(await buildResponseErrorMessage(res, 'Draft write config request failed'));
+  }
+
+  return readJsonResponse<OpenmrsDraftWriteConfig>(res, 'Draft write config response was not valid JSON');
+}
+
+export async function fetchOpenmrsDraftAudit(
+  tokenEndpoint: string,
+  limit = 20,
+): Promise<OpenmrsDraftAuditResponse> {
+  const url = new URL(resolveTokenServerPath(tokenEndpoint, '/openmrs/draft/audit'));
+  url.searchParams.set('limit', String(limit));
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    throw new Error(await buildResponseErrorMessage(res, 'Draft audit request failed'));
+  }
+
+  return readJsonResponse<OpenmrsDraftAuditResponse>(res, 'Draft audit response was not valid JSON');
 }
 
 export function buildRoomName(patientUuid: string, roomPrefix: string): string {

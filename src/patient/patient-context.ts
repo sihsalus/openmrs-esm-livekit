@@ -6,6 +6,7 @@ export interface PatientSummary {
   conditions: string[];
   allergies: string[];
   medications: string[];
+  unavailable?: Array<'conditions' | 'allergies' | 'medications'>;
 }
 
 export interface PatientDemographics {

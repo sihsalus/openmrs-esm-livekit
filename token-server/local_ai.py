@@ -277,12 +277,15 @@ def compile_encounter(body: dict[str, Any]) -> dict[str, Any]:
     redacted_transcript = redact_phi(transcript, names)
     warnings: list[str] = []
 
+    heuristic_draft = _heuristic_draft(redacted_transcript)
+
     try:
         draft = _compile_with_ollama(redacted_transcript)
+        draft = _merge_preserved_facts(draft, heuristic_draft)
         engine = "ollama"
         model = OLLAMA_MODEL
     except Exception as error:
-        draft = _heuristic_draft(redacted_transcript)
+        draft = heuristic_draft
         engine = "heuristic"
         model = None
         warnings.append(f"Ollama parser fallback used: {type(error).__name__}: {str(error)[:160]}")
@@ -488,8 +491,217 @@ def build_draft_audit_event(draft_id: str, body: dict[str, Any], openmrs: dict[s
         "openmrsWrite": openmrs.get("writeStatus"),
         "encounterUuid": openmrs.get("encounterUuid"),
         "authSource": openmrs.get("authSource"),
+        "message": openmrs.get("message"),
         "rawClinicalTextStored": False,
     }
+
+
+def openmrs_draft_write_config(context: dict[str, Any] | None = None) -> dict[str, Any]:
+    context = context or {}
+    missing = _openmrs_missing_write_config({})
+    values = {
+        "encounterTypeUuid": OPENMRS_ENCOUNTER_TYPE_UUID or None,
+        "locationUuid": OPENMRS_LOCATION_UUID or None,
+        "draftObsConceptUuid": OPENMRS_DRAFT_OBS_CONCEPT_UUID or None,
+        "providerUuid": OPENMRS_PROVIDER_UUID or None,
+        "encounterRoleUuid": OPENMRS_ENCOUNTER_ROLE_UUID or None,
+    }
+    result: dict[str, Any] = {
+        "status": "disabled",
+        "enabled": OPENMRS_DRAFT_WRITE_ENABLED,
+        "restBase": f"{OPENMRS_BASE_URL}/ws/rest/v1",
+        "authSource": _auth_source(context),
+        "requiredConfiguration": missing,
+        "optionalConfiguration": [
+            "OPENMRS_PROVIDER_UUID",
+            "OPENMRS_ENCOUNTER_ROLE_UUID",
+            "OPENMRS_STRUCTURED_OBS_CONCEPTS",
+        ],
+        "requiredRequestContext": ["active visitUuid"],
+        "values": values,
+        "resources": {},
+        "validationErrors": [],
+        "rawClinicalTextStored": False,
+        "message": "OpenMRS draft write is disabled.",
+    }
+
+    if not OPENMRS_DRAFT_WRITE_ENABLED:
+        return result
+
+    if missing:
+        result.update(
+            {
+                "status": "not_configured",
+                "message": "OpenMRS draft write is enabled, but required encounter metadata is missing.",
+            }
+        )
+        return result
+
+    auth_headers = _openmrs_auth_headers(context)
+    if not auth_headers:
+        result.update(
+            {
+                "status": "auth_required",
+                "message": "OpenMRS credentials or session cookies are required to validate draft write configuration.",
+            }
+        )
+        return result
+
+    session = _openmrs_request("session", headers=auth_headers)
+    result["session"] = _safe_openmrs_response(session)
+    authenticated = bool(isinstance(session.get("body"), dict) and session["body"].get("authenticated"))
+    result["authenticated"] = authenticated
+    if not session["ok"] or not authenticated:
+        result.update(
+            {
+                "status": "auth_required",
+                "message": "OpenMRS did not accept the credentials used for draft write validation.",
+            }
+        )
+        return result
+
+    resources = {
+        "encounterType": _validate_openmrs_resource(
+            "Encounter type",
+            f"encountertype/{urllib.parse.quote(OPENMRS_ENCOUNTER_TYPE_UUID, safe='')}?v=custom:(uuid,display,name,retired)",
+            auth_headers,
+        ),
+        "location": _validate_openmrs_resource(
+            "Location",
+            f"location/{urllib.parse.quote(OPENMRS_LOCATION_UUID, safe='')}?v=custom:(uuid,display,name,retired)",
+            auth_headers,
+        ),
+        "draftObsConcept": _validate_openmrs_resource(
+            "Draft obs concept",
+            f"concept/{urllib.parse.quote(OPENMRS_DRAFT_OBS_CONCEPT_UUID, safe='')}?v=custom:(uuid,display,name,retired,datatype:(uuid,display,name),conceptClass:(uuid,display,name))",
+            auth_headers,
+            expected_datatype="Text",
+        ),
+    }
+    validation_errors = [
+        error
+        for resource in resources.values()
+        for error in resource.get("validationErrors", [])
+    ]
+    result.update(
+        {
+            "status": "validated" if not validation_errors else "invalid",
+            "resources": resources,
+            "validationErrors": validation_errors,
+            "message": (
+                "OpenMRS draft write configuration is valid."
+                if not validation_errors
+                else "OpenMRS draft write configuration has validation errors."
+            ),
+        }
+    )
+    return result
+
+
+def recent_draft_audit(limit: int = 20) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit or 20), 100))
+    events: list[dict[str, Any]] = []
+    for event in _read_jsonl_tail(AUDIT_LOG_PATH, safe_limit):
+        events.append(_sanitize_draft_audit_event(event))
+
+    return {
+        "status": "ok",
+        "limit": safe_limit,
+        "events": events,
+        "rawClinicalTextStored": False,
+        "message": "Recent draft lifecycle events. Clinical draft text and transcripts are intentionally excluded.",
+    }
+
+
+def _validate_openmrs_resource(
+    label: str,
+    resource: str,
+    auth_headers: dict[str, str],
+    expected_datatype: str | None = None,
+) -> dict[str, Any]:
+    response = _openmrs_request(resource, headers=auth_headers)
+    summary = _openmrs_resource_summary(response)
+    errors: list[str] = []
+    if not response["ok"]:
+        errors.append(f"{label} was not found or could not be loaded")
+    if summary.get("retired") is True:
+        errors.append(f"{label} is retired")
+    if expected_datatype:
+        datatype = summary.get("datatype")
+        if str(datatype or "").lower() != expected_datatype.lower():
+            errors.append(f"{label} must use {expected_datatype} datatype")
+
+    return {
+        **summary,
+        "status": "ok" if not errors else "invalid",
+        "validationErrors": errors,
+    }
+
+
+def _openmrs_resource_summary(response: dict[str, Any]) -> dict[str, Any]:
+    body = response.get("body") if isinstance(response.get("body"), dict) else {}
+    datatype = body.get("datatype") if isinstance(body.get("datatype"), dict) else None
+    concept_class = body.get("conceptClass") if isinstance(body.get("conceptClass"), dict) else None
+    return {
+        "uuid": body.get("uuid"),
+        "display": body.get("display") or body.get("name"),
+        "name": body.get("name"),
+        "retired": body.get("retired"),
+        "datatype": (datatype or {}).get("display") or (datatype or {}).get("name"),
+        "conceptClass": (concept_class or {}).get("display") or (concept_class or {}).get("name"),
+        "httpStatus": response.get("status"),
+    }
+
+
+def _safe_openmrs_response(response: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ok": bool(response.get("ok")),
+        "status": response.get("status"),
+    }
+
+
+def _read_jsonl_tail(path: str, limit: int) -> list[dict[str, Any]]:
+    if not os.path.exists(path):
+        return []
+
+    with open(path, "r", encoding="utf-8") as file:
+        lines = file.readlines()[-limit:]
+
+    records: list[dict[str, Any]] = []
+    for line in lines:
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            records.append(parsed)
+    records.sort(key=lambda item: _safe_int(item.get("createdAt")), reverse=True)
+    return records[:limit]
+
+
+def _sanitize_draft_audit_event(event: dict[str, Any]) -> dict[str, Any]:
+    allowed = (
+        "id",
+        "createdAt",
+        "eventType",
+        "draftId",
+        "patientHash",
+        "writeRequested",
+        "writeEnabled",
+        "openmrsWrite",
+        "encounterUuid",
+        "authSource",
+        "message",
+        "rawClinicalTextStored",
+    )
+    return {key: event.get(key) for key in allowed if key in event}
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def build_openmrs_draft_integration(
@@ -1045,6 +1257,35 @@ def _normalize_draft(draft: dict[str, Any]) -> dict[str, Any]:
     normalized["reviewQueue"] = draft.get("reviewQueue") if isinstance(draft.get("reviewQueue"), list) else []
     normalized["clinicianReviewRequired"] = bool(draft.get("clinicianReviewRequired", True))
     return normalized
+
+
+def _merge_preserved_facts(llm_draft: dict[str, Any], heuristic_draft: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(llm_draft)
+    for key in ("symptoms", "medicationsMentioned", "allergiesMentioned"):
+        merged[key] = _dedupe_casefolded(
+            [*_string_list(llm_draft.get(key)), *_string_list(heuristic_draft.get(key))]
+        )
+
+    for key in ("chiefComplaint", "assessmentNotes", "patientInstructions"):
+        if not str(merged.get(key) or "").strip():
+            merged[key] = heuristic_draft.get(key)
+
+    return merged
+
+
+def _dedupe_casefolded(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value).strip()
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+    return result
 
 
 def _extract_json(text: str) -> dict[str, Any]:

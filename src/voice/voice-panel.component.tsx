@@ -16,9 +16,11 @@ import {
   WarningAlt,
   CircleDash,
   InProgress,
+  Launch,
+  Renew,
   Save,
 } from '@carbon/icons-react';
-import { useConfig, usePatient, useVisit } from '@openmrs/esm-framework';
+import { navigate, useConfig, usePatient, useVisit } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
 import {
   buildOpenmrsDraftWritePayload,
@@ -447,6 +449,8 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const timeouts = useRef<number[]>([]);
   const lastAppliedAgentDraft = useRef<EncounterDraft | null>(null);
   const initialMicrophoneEnableAttempted = useRef(false);
+  const draftSaveInFlight = useRef(false);
+  const micToggleInFlight = useRef(false);
   const {
     transcripts: agentTranscripts,
     agentDraft,
@@ -517,9 +521,24 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     };
   }, [connectionState, localParticipant, microphoneAvailable, muted, t]);
 
-  // Health check on mount
   useEffect(() => {
-    checkHealth(livekitUrl, tokenEndpoint, setHealth);
+    let cancelled = false;
+    setHealth(checkingHealth());
+    fetchServiceHealth(livekitUrl, tokenEndpoint)
+      .then((nextHealth) => {
+        if (!cancelled) {
+          setHealth(nextHealth);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHealth((currentHealth) => ({ ...currentHealth, tokenServer: 'error' }));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [livekitUrl, tokenEndpoint]);
 
   // Merge agent data into UI when real data arrives
@@ -572,7 +591,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     !demoRunning;
 
   const toggleMute = useCallback(async () => {
-    if (!localParticipant) {
+    if (!localParticipant || micToggleInFlight.current) {
       return;
     }
 
@@ -582,11 +601,14 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     }
 
     try {
+      micToggleInFlight.current = true;
       await localParticipant.setMicrophoneEnabled(muted);
       setMuted(!muted);
       setMicError(null);
     } catch (err) {
       setMicError(microphoneErrorMessage(err, t));
+    } finally {
+      micToggleInFlight.current = false;
     }
   }, [localParticipant, microphoneAvailable, muted, t]);
 
@@ -644,6 +666,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     setDraftSavingAction(null);
     setDraftSaveMessage(null);
     setDraftSaveError(null);
+    draftSaveInFlight.current = false;
     setDemoRunning(false);
     lastAppliedAgentDraft.current = null;
     clearTranscripts();
@@ -651,7 +674,9 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
 
   const saveDraft = useCallback(
     async (action: DraftSaveAction) => {
-      if (!draft || !patientUuid || draftSaving || draftOpenmrsSaved) return;
+      if (!draft || !patientUuid || draftSaving || draftOpenmrsSaved || draftSaveInFlight.current) {
+        return;
+      }
 
       if (action === 'openmrs' && health.openmrsDraftWrite !== 'ok') {
         setDraftSaveError(
@@ -673,6 +698,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
         return;
       }
 
+      draftSaveInFlight.current = true;
       setDraftSavingAction(action);
       setDraftSaveError(null);
       setDraftSaveMessage(null);
@@ -714,6 +740,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
           err instanceof Error ? err.message : t('failedToSaveDraft', 'Failed to save draft'),
         );
       } finally {
+        draftSaveInFlight.current = false;
         setDraftSavingAction(null);
       }
     },
@@ -795,6 +822,15 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   ];
   const draftWriteConfigured = health.openmrsDraftWrite === 'ok';
   const draftWriteUnavailable = health.openmrsDraftWrite !== 'ok';
+  const openSavedEncounter = useCallback(() => {
+    if (!patientUuid || !draftEncounterUuid) {
+      return;
+    }
+    navigate({ to: buildPatientEncountersUrl(patientUuid, draftEncounterUuid) });
+  }, [draftEncounterUuid, patientUuid]);
+  const refreshChart = useCallback(() => {
+    window.location.reload();
+  }, []);
 
   return (
     <div className={styles.session}>
@@ -1010,6 +1046,22 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                 encounterUuid: draftEncounterUuid,
               })}
             </p>
+          )}
+          {draftOpenmrsSaved && (
+            <ButtonSet className={styles.postSaveActions}>
+              <Button
+                kind="tertiary"
+                size="sm"
+                renderIcon={Launch}
+                onClick={openSavedEncounter}
+                disabled={!draftEncounterUuid}
+              >
+                {t('openSavedEncounter', 'Open encounter')}
+              </Button>
+              <Button kind="ghost" size="sm" renderIcon={Renew} onClick={refreshChart}>
+                {t('refreshChart', 'Refresh chart')}
+              </Button>
+            </ButtonSet>
           )}
           {draftWriteUnavailable && !draftOpenmrsSaved && (
             <p className={styles.agentStatus}>
@@ -1245,17 +1297,10 @@ function formatConfidence(confidence: number): string {
   return `${Math.round(confidence * 100)}%`;
 }
 
-async function checkHealth(
-  livekitUrl: string,
-  tokenEndpoint: string,
-  setHealth: React.Dispatch<React.SetStateAction<ServiceHealth>>,
-) {
-  setHealth(checkingHealth());
-  try {
-    setHealth(await fetchServiceHealth(livekitUrl, tokenEndpoint));
-  } catch {
-    setHealth((currentHealth) => ({ ...currentHealth, tokenServer: 'error' }));
-  }
+function buildPatientEncountersUrl(patientUuid: string, encounterUuid: string): string {
+  const patient = encodeURIComponent(patientUuid);
+  const encounter = encodeURIComponent(encounterUuid);
+  return `\${openmrsSpaBase}/patient/${patient}/chart/encounters?encounterUuid=${encounter}`;
 }
 
 export default VoicePanel;

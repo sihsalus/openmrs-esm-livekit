@@ -349,6 +349,53 @@ Audit event types:
 - `draft_write_rejected`: an OpenMRS write was requested but blocked or rejected
   by configuration, authentication, patient lookup, or the OpenMRS REST API.
 
+### GET /openmrs/draft/config
+
+Returns the current OpenMRS draft write configuration and validates the configured encounter type, location, and draft obs concept against the OpenMRS REST API. The endpoint does not return credentials or clinical text.
+
+Expected healthy shape:
+
+```json
+{
+  "status": "validated",
+  "enabled": true,
+  "requiredConfiguration": [],
+  "resources": {
+    "encounterType": { "status": "ok", "uuid": "...", "display": "Visit Note" },
+    "location": { "status": "ok", "uuid": "...", "display": "Outpatient Clinic" },
+    "draftObsConcept": {
+      "status": "ok",
+      "uuid": "...",
+      "display": "Text of encounter note",
+      "datatype": "Text"
+    }
+  },
+  "validationErrors": []
+}
+```
+
+Other statuses include `disabled`, `not_configured`, `auth_required`, and `invalid`.
+
+### GET /openmrs/draft/audit
+
+Returns recent draft lifecycle events for the administration page. This is intentionally sanitized: it includes event metadata, write status, encounter UUID, and operational messages, but excludes `draft` and `redactedTranscript`.
+
+```json
+{
+  "status": "ok",
+  "events": [
+    {
+      "eventType": "draft_write_rejected",
+      "openmrsWrite": "visit_required",
+      "message": "OpenMRS write requested, but no active visitUuid was supplied.",
+      "rawClinicalTextStored": false
+    }
+  ]
+}
+```
+
+Use `?limit=20` to bound the number of events returned. The server caps the limit at `100`.
+
 ## Tests
 
 Run the frontend and helper contract checks locally:

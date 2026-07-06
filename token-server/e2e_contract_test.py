@@ -52,6 +52,47 @@ class FakeOpenMRSHandler(BaseHTTPRequestHandler):
                 return
             self.send_json({"uuid": "patient-uuid", "display": "Synthetic Patient"})
             return
+        if self.path.startswith("/openmrs/ws/rest/v1/encountertype/"):
+            if not self.headers.get("Authorization") and not self.headers.get("Cookie"):
+                self.send_json({"error": "auth required"}, status=401)
+                return
+            self.send_json(
+                {
+                    "uuid": "encounter-type-uuid",
+                    "display": "Visit Note",
+                    "name": "Visit Note",
+                    "retired": False,
+                }
+            )
+            return
+        if self.path.startswith("/openmrs/ws/rest/v1/location/"):
+            if not self.headers.get("Authorization") and not self.headers.get("Cookie"):
+                self.send_json({"error": "auth required"}, status=401)
+                return
+            self.send_json(
+                {
+                    "uuid": "location-uuid",
+                    "display": "Outpatient Clinic",
+                    "name": "Outpatient Clinic",
+                    "retired": False,
+                }
+            )
+            return
+        if self.path.startswith("/openmrs/ws/rest/v1/concept/"):
+            if not self.headers.get("Authorization") and not self.headers.get("Cookie"):
+                self.send_json({"error": "auth required"}, status=401)
+                return
+            self.send_json(
+                {
+                    "uuid": "obs-concept-uuid",
+                    "display": "Text of encounter note",
+                    "name": "Text of encounter note",
+                    "retired": False,
+                    "datatype": {"display": "Text", "name": "Text"},
+                    "conceptClass": {"display": "Misc", "name": "Misc"},
+                }
+            )
+            return
         if self.path.startswith("/openmrs/ws/rest/v1/visit/"):
             if not self.headers.get("Authorization") and not self.headers.get("Cookie"):
                 self.send_json({"error": "auth required"}, status=401)
@@ -120,18 +161,21 @@ class FakeOllamaHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/api/generate":
+            content_length = int(self.headers.get("Content-Length", "0"))
+            request_body = self.rfile.read(content_length).decode("utf-8") if content_length else ""
+            draft = {
+                "chiefComplaint": "cough and fever",
+                "symptoms": ["cough", "fever"],
+                "medicationsMentioned": ["paracetamol"],
+                "allergiesMentioned": [],
+                "assessmentNotes": "Clinician review required.",
+                "patientInstructions": "Return if breathing worsens.",
+            }
+            if "empty-medication-extraction-test" in request_body:
+                draft["medicationsMentioned"] = []
             self.send_json(
                 {
-                    "response": json.dumps(
-                        {
-                            "chiefComplaint": "cough and fever",
-                            "symptoms": ["cough", "fever"],
-                            "medicationsMentioned": ["paracetamol"],
-                            "allergiesMentioned": [],
-                            "assessmentNotes": "Clinician review required.",
-                            "patientInstructions": "Return if breathing worsens.",
-                        }
-                    )
+                    "response": json.dumps(draft)
                 }
             )
             return
@@ -397,6 +441,14 @@ class TokenServerE2ETest(unittest.TestCase):
         payload = json.loads(context.exception.read().decode("utf-8"))
         self.assertEqual(payload["code"], "openmrs_session_required")
 
+    def test_admin_draft_get_endpoints_require_authenticated_openmrs_session(self):
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(self.base_url, "/openmrs/draft/config", authenticated=False)
+
+        self.assertEqual(context.exception.code, 401)
+        payload = json.loads(context.exception.read().decode("utf-8"))
+        self.assertEqual(payload["code"], "openmrs_session_required")
+
     def test_openmrs_probe_treats_login_html_as_reachable(self):
         server, base_url = start_server(FakeOpenMRSLoginHandler)
         try:
@@ -551,6 +603,23 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertNotIn("5 de julio de 2026", payload["redactedTranscript"])
         self.assertEqual(payload["draft"]["symptoms"], ["cough", "fever"])
 
+    def test_compile_encounter_preserves_obvious_medications_when_ollama_omits_them(self):
+        payload, _response = request_json(
+            self.base_url,
+            "/compile-encounter",
+            {
+                "transcript": (
+                    "empty-medication-extraction-test. "
+                    "Doctor: Patient reports cough for five days. "
+                    "Current medication is paracetamol 500 mg every 8 hours. "
+                    "No known drug allergies."
+                ),
+            },
+        )
+
+        self.assertEqual(payload["engine"], "ollama")
+        self.assertIn("paracetamol", payload["draft"]["medicationsMentioned"])
+
     def test_compile_encounter_requires_transcript(self):
         with self.assertRaises(urllib.error.HTTPError) as context:
             request_json(self.base_url, "/compile-encounter", {"patientName": "Sofia Demo"})
@@ -632,10 +701,25 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(audit_event["draftId"], payload["draftId"])
         self.assertEqual(audit_event["openmrsWrite"], "created")
         self.assertEqual(audit_event["encounterUuid"], "encounter-created")
+        self.assertEqual(audit_event["message"], "Draft encounter created in OpenMRS for clinician review.")
         self.assertEqual(audit_event["patientHash"], hashlib.sha256(b"test-audit-salt:patient-uuid").hexdigest())
         self.assertNotIn("draft", audit_event)
         self.assertNotIn("redactedTranscript", audit_event)
         self.assertNotIn("Doctor: cough", json.dumps(audit_event))
+
+    def test_openmrs_draft_config_validates_write_metadata(self):
+        payload, _response = request_json(self.base_url, "/openmrs/draft/config")
+
+        self.assertEqual(payload["status"], "validated")
+        self.assertTrue(payload["enabled"])
+        self.assertEqual(payload["authSource"], "server_credentials")
+        self.assertEqual(payload["requiredConfiguration"], [])
+        self.assertEqual(payload["validationErrors"], [])
+        self.assertEqual(payload["resources"]["encounterType"]["display"], "Visit Note")
+        self.assertEqual(payload["resources"]["location"]["display"], "Outpatient Clinic")
+        self.assertEqual(payload["resources"]["draftObsConcept"]["datatype"], "Text")
+        self.assertFalse(payload["rawClinicalTextStored"])
+        self.assertNotIn("Admin123", json.dumps(payload))
 
     def test_openmrs_draft_write_requires_active_visit(self):
         auth = base64.b64encode(b"admin:Admin123").decode("ascii")
@@ -697,6 +781,37 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertFalse(audit_event["writeRequested"])
         self.assertEqual(audit_event["patientHash"], hashlib.sha256(b"test-audit-salt:queued-patient-uuid").hexdigest())
         self.assertNotIn("Doctor: headache", json.dumps(audit_event))
+
+    def test_openmrs_draft_audit_endpoint_returns_sanitized_recent_events(self):
+        payload, _response = request_json(
+            self.base_url,
+            "/openmrs/draft",
+            {
+                "patientUuid": "audit-patient-uuid",
+                "writeToOpenmrs": True,
+                "draft": {
+                    "chiefComplaint": "headache",
+                    "symptoms": ["headache"],
+                    "medicationsMentioned": [],
+                    "allergiesMentioned": [],
+                    "assessmentNotes": "review",
+                    "patientInstructions": "return precautions",
+                },
+                "redactedTranscript": "Doctor: headache with private clinical details",
+            },
+        )
+        self.assertEqual(payload["auditEventType"], "draft_write_rejected")
+
+        audit, _response = request_json(self.base_url, "/openmrs/draft/audit?limit=5")
+        self.assertEqual(audit["status"], "ok")
+        self.assertFalse(audit["rawClinicalTextStored"])
+        event = next(event for event in audit["events"] if event["id"] == payload["auditEventId"])
+        self.assertEqual(event["eventType"], "draft_write_rejected")
+        self.assertEqual(event["openmrsWrite"], "visit_required")
+        self.assertIn("active visitUuid", event["message"])
+        self.assertNotIn("draft", event)
+        self.assertNotIn("redactedTranscript", event)
+        self.assertNotIn("Doctor: headache", json.dumps(audit))
 
     def test_cors_supports_credentialed_o3_requests(self):
         request = urllib.request.Request(
