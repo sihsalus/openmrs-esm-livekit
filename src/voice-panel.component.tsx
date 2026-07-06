@@ -42,6 +42,7 @@ import {
   checkingHealth,
   initialHealth,
   normalizeTokenServerHealth,
+  resolveEmbeddedCapabilityStatus,
   type ServiceHealth,
   type ServiceStatus,
 } from './agent-health';
@@ -721,15 +722,23 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       detail: t('openmrsDraftDetail', 'Compile an anonymized, clinician-reviewable encounter draft.'),
     },
   ];
-  const aiCapabilityPendingLabel =
-    agentHealth === 'ok' ? t('activeViaAgent', 'Active via agent') : undefined;
+  const effectiveAgentHealth: ServiceStatus = health.agent === 'ok' ? 'ok' : agentHealth;
+  const sttCapabilityStatus = resolveEmbeddedCapabilityStatus(health.stt, effectiveAgentHealth);
+  const ttsCapabilityStatus = resolveEmbeddedCapabilityStatus(health.tts, effectiveAgentHealth);
+  const aiCapabilityPendingLabel = t('activeViaAgent', 'Active via agent');
   const sttHealthDetail =
-    health.stt === 'pending' && agentHealth === 'ok'
-      ? t('sttAgentPipelineDetail', 'Dedicated STT endpoint is pending; Whisper STT is configured in the connected LiveKit agent.')
+    health.stt === 'pending' && effectiveAgentHealth === 'ok'
+      ? t(
+          'sttAgentPipelineDetail',
+          'Dedicated STT endpoint is pending; Whisper STT is configured in the connected LiveKit agent.',
+        )
       : undefined;
   const ttsHealthDetail =
-    health.tts === 'pending' && agentHealth === 'ok'
-      ? t('ttsAgentPipelineDetail', 'Dedicated TTS endpoint is pending; Piper TTS is configured in the connected LiveKit agent.')
+    health.tts === 'pending' && effectiveAgentHealth === 'ok'
+      ? t(
+          'ttsAgentPipelineDetail',
+          'Dedicated TTS endpoint is pending; Piper TTS is configured in the connected LiveKit agent.',
+        )
       : undefined;
 
   return (
@@ -1043,15 +1052,19 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                 <ul className={styles.healthList}>
                   <HealthRow
                     label="STT"
-                    status={health.stt}
+                    status={sttCapabilityStatus}
                     detail={sttHealthDetail}
-                    statusText={health.stt === 'pending' ? aiCapabilityPendingLabel : undefined}
+                    statusText={
+                      health.stt === 'pending' && sttCapabilityStatus === 'ok' ? aiCapabilityPendingLabel : undefined
+                    }
                   />
                   <HealthRow
                     label="TTS"
-                    status={health.tts}
+                    status={ttsCapabilityStatus}
                     detail={ttsHealthDetail}
-                    statusText={health.tts === 'pending' ? aiCapabilityPendingLabel : undefined}
+                    statusText={
+                      health.tts === 'pending' && ttsCapabilityStatus === 'ok' ? aiCapabilityPendingLabel : undefined
+                    }
                   />
                   <HealthRow label="LLM" status={health.llm} />
                 </ul>
