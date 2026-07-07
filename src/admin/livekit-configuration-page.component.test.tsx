@@ -28,6 +28,47 @@ describe('LivekitConfigurationPage', () => {
 
   it('renders the operational LiveKit configuration and service health outside the clinical modal', async () => {
     const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/ai/runtime-config')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'ok',
+            config: {
+              localAiFirst: true,
+              sttProvider: 'whisper',
+              ttsProvider: 'piper',
+              deepgramModel: 'nova-3',
+              deepgramEnableDiarization: true,
+              deepgramUseFlux: false,
+              inworldModel: 'inworld-tts-2',
+            },
+            providers: {
+              stt: [
+                {
+                  id: 'whisper',
+                  label: 'Local Whisper',
+                  locality: 'local',
+                  configured: true,
+                  supportsDiarization: false,
+                },
+                {
+                  id: 'deepgram',
+                  label: 'Deepgram Nova',
+                  locality: 'cloud',
+                  configured: true,
+                  supportsDiarization: true,
+                },
+              ],
+              tts: [
+                { id: 'piper', label: 'Local Piper', locality: 'local', configured: true },
+                { id: 'inworld', label: 'Inworld TTS', locality: 'cloud', configured: false },
+              ],
+            },
+            warnings: [],
+          }),
+        });
+      }
+
       if (url.includes('/openmrs/draft/config')) {
         return Promise.resolve({
           ok: true,
@@ -114,6 +155,9 @@ describe('LivekitConfigurationPage', () => {
     expect(screen.getByText('/openmrs/livekit/token')).toBeInTheDocument();
     expect(screen.getByText('http://localhost:3000/openmrs/livekit/token')).toBeInTheDocument();
     expect(screen.getByText('openmrs-voice-')).toBeInTheDocument();
+    expect(await screen.findByLabelText('STT provider')).toBeInTheDocument();
+    expect(screen.getByLabelText('TTS provider')).toBeInTheDocument();
+    expect(screen.getByText('Local first')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Service health' }));
     expect(await screen.findByRole('heading', { name: 'Privacy & service health' })).toBeInTheDocument();
@@ -140,6 +184,25 @@ describe('LivekitConfigurationPage', () => {
 
   it('keeps validated draft write configuration visible when audit loading fails', async () => {
     const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/ai/runtime-config')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'ok',
+            config: {
+              localAiFirst: true,
+              sttProvider: 'whisper',
+              ttsProvider: 'piper',
+              deepgramModel: 'nova-3',
+              deepgramEnableDiarization: true,
+              deepgramUseFlux: false,
+              inworldModel: 'inworld-tts-2',
+            },
+            warnings: [],
+          }),
+        });
+      }
+
       if (url.includes('/openmrs/draft/config')) {
         return Promise.resolve({
           ok: true,

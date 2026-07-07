@@ -122,6 +122,63 @@
   }
 }
 
+.runtimeForm {
+  align-items: end;
+  display: grid;
+  gap: layout.$spacing-04;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+
+  label {
+    display: grid;
+    gap: layout.$spacing-02;
+    min-width: 0;
+
+    span {
+      color: var(--cds-text-secondary);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+  }
+
+  input:not([type='checkbox']),
+  select {
+    background: var(--cds-field);
+    border: 1px solid var(--cds-border-strong-01);
+    color: var(--cds-text-primary);
+    font-size: 0.875rem;
+    min-height: 2.5rem;
+    min-width: 0;
+    padding: 0 layout.$spacing-03;
+    width: 100%;
+  }
+
+  input:disabled,
+  select:disabled {
+    color: var(--cds-text-disabled);
+  }
+}
+
+.checkboxRow {
+  align-items: center;
+  align-self: center;
+  display: flex !important;
+  gap: layout.$spacing-03 !important;
+  min-height: 2.5rem;
+
+  input {
+    height: 1rem;
+    width: 1rem;
+  }
+}
+
+.runtimeActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: layout.$spacing-03;
+  justify-content: flex-end;
+}
+
 .connectionDetails {
   display: grid;
   gap: layout.$spacing-05;

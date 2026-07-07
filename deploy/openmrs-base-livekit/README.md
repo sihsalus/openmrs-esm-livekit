@@ -99,17 +99,32 @@ PIPER_MODEL_PATH_EN=/srv/piper/voices/en_US-lessac-medium.onnx
 Optional real diarization with a cloud STT provider:
 
 ```bash
-LIVEKIT_AGENT_STT_PROVIDER=deepgram
 DEEPGRAM_API_KEY=<deepgram-api-key>
 DEEPGRAM_MODEL=nova-3
 DEEPGRAM_ENABLE_DIARIZATION=true
 ```
 
-The local Whisper provider used by the CPU stack does not emit speaker IDs. With
-Deepgram diarization enabled, transcript events can include `speaker_id`; the
-agent maps the first speaker to the configured default capture role and a second
-speaker to the other clinical role. Use this only when the site accepts sending
-audio to that provider under the required privacy agreement.
+Keep `LIVEKIT_AGENT_STT_PROVIDER=whisper` for local-first startup unless the
+whole agent should boot directly on Deepgram. The admin UI can persist
+`sttProvider=deepgram` through the helper and apply it to newly created rooms via
+LiveKit metadata. The local Whisper provider used by the CPU stack does not emit
+speaker IDs. With Deepgram diarization enabled, transcript events can include
+`speaker_id`; the agent maps the first speaker to the configured default capture
+role and a second speaker to the other clinical role. Use this only when the
+site accepts sending audio to that provider under the required privacy
+agreement.
+
+Optional Inworld TTS override for new rooms:
+
+```bash
+INWORLD_API_KEY=<inworld-api-key>
+INWORLD_VOICE_ID=<inworld-voice-id>
+INWORLD_MODEL=inworld-tts-2
+```
+
+The helper stores non-secret runtime choices at
+`AI_RUNTIME_CONFIG_PATH=/data/ai-runtime-config.json`. Provider API keys remain
+environment variables and are not accepted from the browser.
 
 Production-like shared deployments should also set:
 

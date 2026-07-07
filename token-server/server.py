@@ -12,6 +12,8 @@ import hashlib
 import hmac
 import json
 import os
+import re
+import stat
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import error as urllib_error
@@ -43,6 +45,10 @@ SUPPORTED_CLINICAL_LANGUAGES = {"en", "es"}
 DEFAULT_CLINICAL_LANGUAGE = "en"
 SUPPORTED_CAPTURE_ROLES = {"doctor", "patient"}
 DEFAULT_CAPTURE_ROLE = "doctor"
+SUPPORTED_STT_PROVIDERS = {"whisper", "deepgram"}
+SUPPORTED_TTS_PROVIDERS = {"piper", "inworld"}
+DEFAULT_STT_PROVIDER = "whisper"
+DEFAULT_TTS_PROVIDER = "piper"
 
 
 def env_flag(name: str) -> bool:
@@ -78,6 +84,10 @@ LIVEKIT_HTTP_URL = os.environ.get("LIVEKIT_HTTP_URL", "").strip().rstrip("/")
 LIVEKIT_ROOM_METADATA_TIMEOUT_SECONDS = float(
     os.environ.get("LIVEKIT_ROOM_METADATA_TIMEOUT_SECONDS", "2")
 )
+AI_RUNTIME_CONFIG_PATH = os.environ.get(
+    "AI_RUNTIME_CONFIG_PATH",
+    os.environ.get("LIVEKIT_AGENT_RUNTIME_CONFIG_PATH", "/tmp/openmrs-livekit-ai-runtime-config.json"),
+)
 TOKEN_SERVER_ENV = os.environ.get("TOKEN_SERVER_ENV", "development").strip().lower()
 REQUIRE_PRODUCTION_CONFIG = TOKEN_SERVER_ENV in PRODUCTION_ENVIRONMENTS or env_flag(
     "TOKEN_SERVER_REQUIRE_PRODUCTION_CONFIG"
@@ -91,6 +101,7 @@ OPENMRS_SESSION_AUTH_PATHS = {
     "/openmrs/draft",
     "/openmrs/draft/audit",
     "/openmrs/draft/config",
+    "/ai/runtime-config",
     "/compile-encounter",
     "/recording/session",
     "/synthetic-consultation",
@@ -164,6 +175,10 @@ class TokenHandler(BaseHTTPRequestHandler):
             self._handle_json_get(lambda: recent_draft_audit(self._query_int("limit", 20)))
             return
 
+        if path == "/ai/runtime-config":
+            self._handle_json_get(ai_runtime_config_response)
+            return
+
         self.send_error(404)
 
     def do_OPTIONS(self):
@@ -183,6 +198,15 @@ class TokenHandler(BaseHTTPRequestHandler):
         if path == "/openmrs/draft":
             try:
                 self._send_json(queue_openmrs_draft(self._read_json(), self._request_context()))
+            except ValueError as error:
+                self._send_json({"status": "error", "error": str(error)}, status=400)
+            except Exception as error:
+                self._send_json({"status": "error", "error": str(error)}, status=500)
+            return
+
+        if path == "/ai/runtime-config":
+            try:
+                self._send_json(save_ai_runtime_config(self._read_json()))
             except ValueError as error:
                 self._send_json({"status": "error", "error": str(error)}, status=400)
             except Exception as error:
@@ -246,6 +270,9 @@ class TokenHandler(BaseHTTPRequestHandler):
             capture_role,
         )
         visit_uuid = sanitize_openmrs_reference(body.get("visitUuid"))
+        ai_runtime_config = effective_ai_runtime_config()
+        agent_provider_overrides = agent_provider_overrides_from_config(ai_runtime_config)
+        speaker_attribution_mode = speaker_attribution_mode_for_config(ai_runtime_config)
         identity_prefix = "clinician" if capture_role == "doctor" else "patient"
         identity = f"{identity_prefix}-{int(time.time())}"
 
@@ -257,6 +284,8 @@ class TokenHandler(BaseHTTPRequestHandler):
             agent_voice_language,
             default_human_role,
             visit_uuid,
+            agent_provider_overrides,
+            speaker_attribution_mode,
         )
         metadata_result = sync_livekit_room_metadata(room_name, room_metadata)
         token = create_token(
@@ -267,7 +296,8 @@ class TokenHandler(BaseHTTPRequestHandler):
                 "captureRole": capture_role,
                 "participantRole": capture_role,
                 "defaultHumanRole": default_human_role,
-                "speakerAttributionMode": "source-role",
+                "speakerAttributionMode": speaker_attribution_mode,
+                "agentProviderOverrides": agent_provider_overrides,
                 "patientUuid": patient_uuid,
                 **({"visitUuid": visit_uuid} if visit_uuid else {}),
                 "doctorLanguage": doctor_language,
@@ -424,6 +454,205 @@ def sanitize_openmrs_reference(value: object) -> str:
     return "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in str(value or "").strip())
 
 
+def env_provider(name: str, supported: set[str], fallback: str) -> str:
+    value = str(os.environ.get(name, "")).strip().lower()
+    return value if value in supported else fallback
+
+
+def env_bool(name: str, fallback: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return fallback
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def sanitize_model_name(value: object, fallback: str) -> str:
+    model = str(value or "").strip()
+    if not model:
+        return fallback
+    if len(model) <= 80 and re.fullmatch(r"[A-Za-z0-9._:-]+", model):
+        return model
+    return fallback
+
+
+def sanitize_bool(value: object, fallback: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return fallback
+
+
+def default_ai_runtime_config() -> dict:
+    return {
+        "localAiFirst": True,
+        "sttProvider": env_provider(
+            "LIVEKIT_AGENT_STT_PROVIDER",
+            SUPPORTED_STT_PROVIDERS,
+            DEFAULT_STT_PROVIDER,
+        ),
+        "ttsProvider": env_provider(
+            "LIVEKIT_AGENT_TTS_PROVIDER",
+            SUPPORTED_TTS_PROVIDERS,
+            DEFAULT_TTS_PROVIDER,
+        ),
+        "deepgramModel": sanitize_model_name(os.environ.get("DEEPGRAM_MODEL"), "nova-3"),
+        "deepgramEnableDiarization": env_bool("DEEPGRAM_ENABLE_DIARIZATION", True),
+        "deepgramUseFlux": env_bool("DEEPGRAM_USE_FLUX", False),
+        "inworldModel": sanitize_model_name(os.environ.get("INWORLD_MODEL"), "inworld-tts-2"),
+    }
+
+
+def load_ai_runtime_config() -> dict:
+    defaults = default_ai_runtime_config()
+    if not AI_RUNTIME_CONFIG_PATH:
+        return defaults
+    try:
+        with open(AI_RUNTIME_CONFIG_PATH, encoding="utf-8") as handle:
+            stored = json.load(handle)
+    except FileNotFoundError:
+        return defaults
+    except Exception as error:
+        print(f"[token-server] AI runtime config load failed: {type(error).__name__}: {error}")
+        return defaults
+    if not isinstance(stored, dict):
+        return defaults
+    return sanitize_ai_runtime_config({**defaults, **stored})
+
+
+def sanitize_ai_runtime_config(body: dict) -> dict:
+    defaults = default_ai_runtime_config()
+    stt_provider = str(body.get("sttProvider") or defaults["sttProvider"]).strip().lower()
+    tts_provider = str(body.get("ttsProvider") or defaults["ttsProvider"]).strip().lower()
+    if stt_provider not in SUPPORTED_STT_PROVIDERS:
+        stt_provider = defaults["sttProvider"]
+    if tts_provider not in SUPPORTED_TTS_PROVIDERS:
+        tts_provider = defaults["ttsProvider"]
+
+    return {
+        "localAiFirst": True,
+        "sttProvider": stt_provider,
+        "ttsProvider": tts_provider,
+        "deepgramModel": sanitize_model_name(body.get("deepgramModel"), defaults["deepgramModel"]),
+        "deepgramEnableDiarization": sanitize_bool(
+            body.get("deepgramEnableDiarization"),
+            defaults["deepgramEnableDiarization"],
+        ),
+        "deepgramUseFlux": sanitize_bool(body.get("deepgramUseFlux"), defaults["deepgramUseFlux"]),
+        "inworldModel": sanitize_model_name(body.get("inworldModel"), defaults["inworldModel"]),
+    }
+
+
+def ai_runtime_config_errors(config: dict) -> list[str]:
+    errors = []
+    if config.get("sttProvider") == "deepgram" and not os.environ.get("DEEPGRAM_API_KEY"):
+        errors.append("DEEPGRAM_API_KEY is required before selecting Deepgram STT")
+    if config.get("ttsProvider") == "inworld":
+        if not os.environ.get("INWORLD_API_KEY"):
+            errors.append("INWORLD_API_KEY is required before selecting Inworld TTS")
+        if not os.environ.get("INWORLD_VOICE_ID"):
+            errors.append("INWORLD_VOICE_ID is required before selecting Inworld TTS")
+    return errors
+
+
+def effective_ai_runtime_config() -> dict:
+    config = load_ai_runtime_config()
+    if config.get("sttProvider") == "deepgram" and not os.environ.get("DEEPGRAM_API_KEY"):
+        config = {**config, "sttProvider": DEFAULT_STT_PROVIDER}
+    if config.get("ttsProvider") == "inworld" and (
+        not os.environ.get("INWORLD_API_KEY") or not os.environ.get("INWORLD_VOICE_ID")
+    ):
+        config = {**config, "ttsProvider": DEFAULT_TTS_PROVIDER}
+    return config
+
+
+def save_ai_runtime_config(body: dict) -> dict:
+    if not isinstance(body, dict):
+        raise ValueError("Request body must be a JSON object")
+    config = sanitize_ai_runtime_config({**load_ai_runtime_config(), **body})
+    errors = ai_runtime_config_errors(config)
+    if errors:
+        raise ValueError("; ".join(errors))
+    directory = os.path.dirname(AI_RUNTIME_CONFIG_PATH)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    with open(AI_RUNTIME_CONFIG_PATH, "w", encoding="utf-8") as handle:
+        json.dump(config, handle, separators=(",", ":"))
+        handle.write("\n")
+    os.chmod(AI_RUNTIME_CONFIG_PATH, stat.S_IRUSR | stat.S_IWUSR)
+    return ai_runtime_config_response(config)
+
+
+def ai_runtime_config_response(config: dict | None = None) -> dict:
+    config = sanitize_ai_runtime_config(config or load_ai_runtime_config())
+    errors = ai_runtime_config_errors(config)
+    return {
+        "status": "invalid" if errors else "ok",
+        "config": config,
+        "effectiveConfig": effective_ai_runtime_config(),
+        "providers": {
+            "stt": [
+                {
+                    "id": "whisper",
+                    "label": "Local Whisper",
+                    "locality": "local",
+                    "configured": True,
+                    "supportsDiarization": False,
+                },
+                {
+                    "id": "deepgram",
+                    "label": "Deepgram Nova",
+                    "locality": "cloud",
+                    "configured": bool(os.environ.get("DEEPGRAM_API_KEY")),
+                    "supportsDiarization": True,
+                },
+            ],
+            "tts": [
+                {
+                    "id": "piper",
+                    "label": "Local Piper",
+                    "locality": "local",
+                    "configured": True,
+                },
+                {
+                    "id": "inworld",
+                    "label": "Inworld TTS",
+                    "locality": "cloud",
+                    "configured": bool(os.environ.get("INWORLD_API_KEY"))
+                    and bool(os.environ.get("INWORLD_VOICE_ID")),
+                },
+            ],
+        },
+        "secrets": {
+            "deepgramApiKeyConfigured": bool(os.environ.get("DEEPGRAM_API_KEY")),
+            "inworldApiKeyConfigured": bool(os.environ.get("INWORLD_API_KEY")),
+            "inworldVoiceIdConfigured": bool(os.environ.get("INWORLD_VOICE_ID")),
+        },
+        "warnings": errors,
+    }
+
+
+def agent_provider_overrides_from_config(config: dict) -> dict:
+    return {
+        "sttProvider": config["sttProvider"],
+        "ttsProvider": config["ttsProvider"],
+        "deepgramModel": config["deepgramModel"],
+        "deepgramEnableDiarization": config["deepgramEnableDiarization"],
+        "deepgramUseFlux": config["deepgramUseFlux"],
+        "inworldModel": config["inworldModel"],
+    }
+
+
+def speaker_attribution_mode_for_config(config: dict) -> str:
+    if config.get("sttProvider") == "deepgram" and config.get("deepgramEnableDiarization") is True:
+        return "source-role+stt-speaker-id"
+    return "source-role"
+
+
 def build_room_metadata(
     patient_uuid: str,
     room_prefix: str,
@@ -432,6 +661,8 @@ def build_room_metadata(
     agent_voice_language: str | None = None,
     default_human_role: str = DEFAULT_CAPTURE_ROLE,
     visit_uuid: str = "",
+    agent_provider_overrides: dict | None = None,
+    speaker_attribution_mode: str = "source-role",
 ) -> dict:
     doctor_language = sanitize_language_code(doctor_language, DEFAULT_CLINICAL_LANGUAGE)
     patient_language = sanitize_language_code(patient_language, doctor_language)
@@ -444,10 +675,12 @@ def build_room_metadata(
         "patientLanguage": patient_language,
         "agentVoiceLanguage": agent_voice_language,
         "languageMode": "bilingual" if doctor_language != patient_language else "single-language",
-        "speakerAttributionMode": "source-role",
+        "speakerAttributionMode": speaker_attribution_mode,
         "defaultHumanRole": default_human_role,
         "source": "openmrs-livekit-token-server",
     }
+    if agent_provider_overrides:
+        metadata["agentProviderOverrides"] = agent_provider_overrides
     if visit_uuid:
         metadata["visitUuid"] = visit_uuid
     return metadata
@@ -551,6 +784,7 @@ def build_token_server_health() -> dict:
     services["tokenServerAuth"] = token_server_auth_status()
     services["cors"] = cors_status()
     services["productionReadiness"] = production_readiness_status()
+    services["aiRuntimeConfig"] = ai_runtime_config_status()
     for warning in token_server_warnings():
         payload.setdefault("warnings", []).append(warning)
     return payload
@@ -586,6 +820,19 @@ def livekit_room_metadata_status() -> dict:
         "status": "configured" if LIVEKIT_HTTP_URL else "disabled",
         "livekitHttpUrlConfigured": bool(LIVEKIT_HTTP_URL),
         "contract": "Best-effort LiveKit room metadata with patientUuid, roomPrefix, languages, agent voice, and source-role attribution",
+    }
+
+
+def ai_runtime_config_status() -> dict:
+    response = ai_runtime_config_response()
+    return {
+        "status": "configured" if response["status"] == "ok" else "invalid",
+        "config": response["config"],
+        "effectiveConfig": response["effectiveConfig"],
+        "providers": response["providers"],
+        "secrets": response["secrets"],
+        "warnings": response["warnings"],
+        "contract": "Room-scoped AI provider overrides; API keys stay in server/agent environment variables.",
     }
 
 

@@ -139,6 +139,39 @@ export interface OpenmrsDraftAuditResponse {
   message?: string;
 }
 
+export type AiRuntimeSttProvider = 'whisper' | 'deepgram';
+export type AiRuntimeTtsProvider = 'piper' | 'inworld';
+
+export interface AiRuntimeConfig {
+  localAiFirst: boolean;
+  sttProvider: AiRuntimeSttProvider;
+  ttsProvider: AiRuntimeTtsProvider;
+  deepgramModel: string;
+  deepgramEnableDiarization: boolean;
+  deepgramUseFlux: boolean;
+  inworldModel: string;
+}
+
+export interface AiRuntimeProviderOption {
+  id: string;
+  label: string;
+  locality: 'local' | 'cloud';
+  configured: boolean;
+  supportsDiarization?: boolean;
+}
+
+export interface AiRuntimeConfigResponse {
+  status: 'ok' | 'invalid' | 'error';
+  config: AiRuntimeConfig;
+  effectiveConfig?: AiRuntimeConfig;
+  providers?: {
+    stt?: AiRuntimeProviderOption[];
+    tts?: AiRuntimeProviderOption[];
+  };
+  secrets?: Record<string, boolean>;
+  warnings?: string[];
+}
+
 export function buildQueuedOpenmrsDraftPayload(
   payload: Omit<OpenmrsDraftPayload, 'writeToOpenmrs'>,
 ): OpenmrsDraftPayload {
@@ -204,6 +237,37 @@ export async function fetchOpenmrsDraftAudit(
   }
 
   return readJsonResponse<OpenmrsDraftAuditResponse>(res, 'Draft audit response was not valid JSON');
+}
+
+export async function fetchAiRuntimeConfig(tokenEndpoint: string): Promise<AiRuntimeConfigResponse> {
+  const res = await fetch(resolveTokenServerPath(tokenEndpoint, '/ai/runtime-config'), {
+    method: 'GET',
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    throw new Error(await buildResponseErrorMessage(res, 'AI runtime config request failed'));
+  }
+
+  return readJsonResponse<AiRuntimeConfigResponse>(res, 'AI runtime config response was not valid JSON');
+}
+
+export async function saveAiRuntimeConfig(
+  tokenEndpoint: string,
+  config: AiRuntimeConfig,
+): Promise<AiRuntimeConfigResponse> {
+  const res = await fetch(resolveTokenServerPath(tokenEndpoint, '/ai/runtime-config'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(config),
+  });
+
+  if (!res.ok) {
+    throw new Error(await buildResponseErrorMessage(res, 'AI runtime config save failed'));
+  }
+
+  return readJsonResponse<AiRuntimeConfigResponse>(res, 'AI runtime config response was not valid JSON');
 }
 
 export function buildRoomName(patientUuid: string, roomPrefix: string): string {

@@ -202,7 +202,15 @@ The token request sends:
   "agentVoiceLanguage": "es",
   "captureRole": "doctor",
   "defaultHumanRole": "doctor",
-  "speakerAttributionMode": "source-role"
+  "speakerAttributionMode": "source-role",
+  "agentProviderOverrides": {
+    "sttProvider": "whisper",
+    "ttsProvider": "piper",
+    "deepgramModel": "nova-3",
+    "deepgramEnableDiarization": true,
+    "deepgramUseFlux": false,
+    "inworldModel": "inworld-tts-2"
+  }
 }
 ```
 
@@ -225,6 +233,12 @@ that emits speaker IDs. The deploy stack supports Deepgram with
 `DEEPGRAM_ENABLE_DIARIZATION=true`. The default local Whisper CPU provider does
 not emit speaker IDs.
 
+The admin configuration page can persist room-scoped AI runtime settings through
+`GET/POST /ai/runtime-config`. Local Whisper/Piper remain the default. Cloud
+providers are selected per new LiveKit room by adding `agentProviderOverrides`
+to room metadata; API keys stay in server and agent environment variables and
+are never accepted from the browser.
+
 ## Helper Service Contracts
 
 The helper is not the realtime conversational agent. It provides local contracts
@@ -234,6 +248,8 @@ that support the frontend, validation workflows, and smoke tests.
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /health`                  | Reports LiveKit, OpenMRS, Ollama, agent, STT/TTS, token signing, CORS, local storage, draft audit, and production readiness status.                                          |
 | `POST /token`                  | Returns an HS256 LiveKit JWT with a room-scoped join grant and optional room metadata sync.                                                                                  |
+| `GET /ai/runtime-config`       | Returns the persisted room-scoped STT/TTS provider settings and whether required provider secrets are configured.                                                            |
+| `POST /ai/runtime-config`      | Saves room-scoped provider settings after validating that required cloud provider secrets exist in the helper environment.                                                   |
 | `POST /compile-encounter`      | Requires `transcript` or `text`, redacts PHI-like text, and compiles a clinician-reviewable OpenMRS draft using Ollama when available or deterministic heuristics otherwise. |
 | `POST /synthetic-consultation` | Generates deterministic synthetic dialogue, redacted transcript, draft, and an `openmrsDraftRequest` for validation and e2e tests.                                           |
 | `POST /recording/session`      | Records a consent manifest for future recording workflow; it does not capture or store raw audio by default.                                                                 |

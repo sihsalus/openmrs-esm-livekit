@@ -1,14 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  type AiRuntimeConfig,
   buildOpenmrsDraftWritePayload,
   buildQueuedOpenmrsDraftPayload,
   buildRoomName,
+  fetchAiRuntimeConfig,
   fetchLivekitToken,
   fetchOpenmrsDraftAudit,
   fetchOpenmrsDraftWriteConfig,
   resolveLivekitServerUrl,
   resolveTokenEndpoint,
   resolveTokenServerPath,
+  saveAiRuntimeConfig,
   saveOpenmrsDraft,
 } from './livekit-token';
 
@@ -169,6 +172,53 @@ describe('LiveKit token endpoint transport', () => {
       patientUuid: 'patient-123',
       visitUuid: 'visit-123',
     });
+  });
+
+  it('fetches and saves room-scoped AI runtime provider configuration', async () => {
+    stubBrowserLocation('https://openmrs.example/spa/home');
+    const runtimeConfig: AiRuntimeConfig = {
+      localAiFirst: true,
+      sttProvider: 'deepgram',
+      ttsProvider: 'piper',
+      deepgramModel: 'nova-3',
+      deepgramEnableDiarization: true,
+      deepgramUseFlux: false,
+      inworldModel: 'inworld-tts-2',
+    };
+    const responsePayload = {
+      status: 'ok',
+      config: runtimeConfig,
+      secrets: {
+        deepgramApiKeyConfigured: true,
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => responsePayload,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchAiRuntimeConfig('https://openmrs.example/livekit/token')).resolves.toEqual(
+      responsePayload,
+    );
+    await expect(
+      saveAiRuntimeConfig('https://openmrs.example/livekit/token', runtimeConfig),
+    ).resolves.toEqual(responsePayload);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://openmrs.example/livekit/ai/runtime-config', {
+      method: 'GET',
+      credentials: 'include',
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://openmrs.example/livekit/ai/runtime-config',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(runtimeConfig),
+      }),
+    );
   });
 
   it('can request a patient capture token for single-browser role simulation', async () => {

@@ -162,6 +162,14 @@ The metadata payload intentionally stays minimal:
   "languageMode": "bilingual",
   "speakerAttributionMode": "source-role",
   "defaultHumanRole": "doctor",
+  "agentProviderOverrides": {
+    "sttProvider": "whisper",
+    "ttsProvider": "piper",
+    "deepgramModel": "nova-3",
+    "deepgramEnableDiarization": true,
+    "deepgramUseFlux": false,
+    "inworldModel": "inworld-tts-2"
+  },
   "source": "openmrs-livekit-token-server"
 }
 ```
@@ -181,7 +189,11 @@ The helper also signs participant metadata with:
   "captureRole": "doctor",
   "participantRole": "doctor",
   "defaultHumanRole": "doctor",
-  "speakerAttributionMode": "source-role"
+  "speakerAttributionMode": "source-role",
+  "agentProviderOverrides": {
+    "sttProvider": "whisper",
+    "ttsProvider": "piper"
+  }
 }
 ```
 
@@ -196,6 +208,21 @@ The default local Whisper CPU provider does not emit speaker IDs. To test real
 diarization through the LiveKit agent, configure a provider that emits speaker
 IDs, for example `LIVEKIT_AGENT_STT_PROVIDER=deepgram` with
 `DEEPGRAM_API_KEY` and `DEEPGRAM_ENABLE_DIARIZATION=true`.
+
+Runtime provider config:
+
+```http
+GET /ai/runtime-config
+POST /ai/runtime-config
+```
+
+The POST body accepts only non-secret provider settings such as `sttProvider`,
+`ttsProvider`, `deepgramModel`, `deepgramEnableDiarization`, `deepgramUseFlux`,
+and `inworldModel`. API keys remain environment variables. Selecting
+`sttProvider=deepgram` requires `DEEPGRAM_API_KEY`; selecting
+`ttsProvider=inworld` requires `INWORLD_API_KEY` and `INWORLD_VOICE_ID`. Saved
+values are written to `AI_RUNTIME_CONFIG_PATH` and applied to newly created
+LiveKit rooms through `agentProviderOverrides` metadata.
 
 If the LiveKit room already exists, the helper updates room metadata instead of
 failing the token request. If metadata sync fails, `/token` still returns the
