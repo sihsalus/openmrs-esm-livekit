@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import LivekitConfigurationPage from './livekit-configuration-page.component';
 
@@ -114,11 +114,15 @@ describe('LivekitConfigurationPage', () => {
     expect(screen.getByText('/openmrs/livekit/token')).toBeInTheDocument();
     expect(screen.getByText('http://localhost:3000/openmrs/livekit/token')).toBeInTheDocument();
     expect(screen.getByText('openmrs-voice-')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Service health' }));
     expect(await screen.findByRole('heading', { name: 'Privacy & service health' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Privacy guarantees' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Service health' })).toBeInTheDocument();
     expect(screen.getAllByText('Active via agent')).toHaveLength(3);
     expect(screen.getByText('Review queue')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Draft write' }));
     expect(
       await screen.findByRole('heading', { name: 'OpenMRS draft write configuration' }),
     ).toBeInTheDocument();
@@ -126,6 +130,8 @@ describe('LivekitConfigurationPage', () => {
     expect(screen.getByText('Visit Note')).toBeInTheDocument();
     expect(screen.getByText('Outpatient Clinic')).toBeInTheDocument();
     expect(screen.getByText('Text of encounter note')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Draft audit' }));
     expect(await screen.findByRole('heading', { name: 'Draft audit' })).toBeInTheDocument();
     expect(screen.getByText('draft_write_rejected')).toBeInTheDocument();
     expect(screen.getByText('visit_required')).toBeInTheDocument();
@@ -204,6 +210,7 @@ describe('LivekitConfigurationPage', () => {
 
     render(<LivekitConfigurationPage />);
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Draft write' }));
     expect(await screen.findByText('Visit Note')).toBeInTheDocument();
     expect(screen.getByText('Outpatient Clinic')).toBeInTheDocument();
     expect(screen.getByText('Text of encounter note')).toBeInTheDocument();
@@ -212,6 +219,8 @@ describe('LivekitConfigurationPage', () => {
         'Draft audit request failed: 500 Internal Server Error - Audit store unavailable',
       ),
     ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Draft audit' }));
     expect(screen.getByText('Draft audit unavailable.')).toBeInTheDocument();
   });
 });

@@ -1,11 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import { Button, ModalBody, ModalFooter, ModalHeader } from '@carbon/react';
-import { Microphone, Play, Renew } from '@carbon/icons-react';
+import { Microphone } from '@carbon/icons-react';
 import { useTranslation } from 'react-i18next';
-import VoicePanel, {
-  type VoicePanelPreflightActions,
-  type VoicePanelSessionActions,
-} from './voice-panel.component';
+import VoicePanel, { type VoicePanelPreflightActions } from './voice-panel.component';
 import styles from './voice-panel.scss';
 
 interface VoiceModalProps {
@@ -15,7 +12,6 @@ interface VoiceModalProps {
 const VoiceModal: React.FC<VoiceModalProps> = ({ close }) => {
   const { t } = useTranslation();
   const [preflightActions, setPreflightActions] = useState<VoicePanelPreflightActions | null>(null);
-  const [sessionActions, setSessionActions] = useState<VoicePanelSessionActions | null>(null);
   const closeModal = useCallback(() => close?.(), [close]);
 
   return (
@@ -23,14 +19,10 @@ const VoiceModal: React.FC<VoiceModalProps> = ({ close }) => {
       <ModalHeader closeModal={close} title={t('voiceConsultation', 'Voice consultation')} />
       <ModalBody>
         <div className={styles.modalContent}>
-          <VoicePanel
-            onClose={close}
-            onPreflightActionsChange={setPreflightActions}
-            onSessionActionsChange={setSessionActions}
-          />
+          <VoicePanel onClose={close} onPreflightActionsChange={setPreflightActions} />
         </div>
       </ModalBody>
-      {preflightActions ? (
+      {preflightActions && (
         <ModalFooter className={styles.modalFooter}>
           <Button kind="secondary" onClick={closeModal}>
             {t('cancel', 'Cancel')}
@@ -42,30 +34,7 @@ const VoiceModal: React.FC<VoiceModalProps> = ({ close }) => {
             </span>
           </Button>
         </ModalFooter>
-      ) : sessionActions ? (
-        <ModalFooter className={styles.modalFooter}>
-          <Button
-            kind="secondary"
-            renderIcon={Renew}
-            onClick={sessionActions.onResetFlow}
-            disabled={sessionActions.demoRunning}
-          >
-            {t('resetFlow', 'Reset flow')}
-          </Button>
-          {sessionActions.demoEnabled && (
-            <Button
-              kind="tertiary"
-              renderIcon={Play}
-              onClick={sessionActions.onPreviewDemo}
-              disabled={sessionActions.demoRunning}
-            >
-              {sessionActions.demoRunning
-                ? t('demoRunning', 'Running demo...')
-                : t('previewDemo', 'Preview demo')}
-            </Button>
-          )}
-        </ModalFooter>
-      ) : null}
+      )}
     </>
   );
 };

@@ -20,8 +20,18 @@ describe('LiveKit token endpoint transport', () => {
   it('derives secure transport URLs when OpenMRS is served over HTTPS', () => {
     stubBrowserLocation('https://openmrs.example/spa/home');
 
-    expect(resolveLivekitServerUrl()).toBe('wss://openmrs.example:7880');
+    expect(resolveLivekitServerUrl()).toBe('wss://openmrs.example/livekit-sfu');
     expect(resolveTokenEndpoint()).toBe('https://openmrs.example:7890/token');
+  });
+
+  it('derives the LiveKit gateway URL from the current browser host', () => {
+    stubBrowserLocation('https://100.120.80.60/openmrs/spa/home');
+
+    expect(resolveLivekitServerUrl()).toBe('wss://100.120.80.60/livekit-sfu');
+
+    stubBrowserLocation('https://192.168.200.231:8443/openmrs/spa/home');
+
+    expect(resolveLivekitServerUrl()).toBe('wss://192.168.200.231:8443/livekit-sfu');
   });
 
   it('rejects configured cleartext endpoints from an HTTPS OpenMRS page', () => {
@@ -311,6 +321,7 @@ function stubBrowserLocation(href: string) {
   vi.stubGlobal('window', {
     location: {
       href: url.href,
+      host: url.host,
       hostname: url.hostname,
       protocol: url.protocol,
     },
