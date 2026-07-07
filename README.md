@@ -244,16 +244,16 @@ are never accepted from the browser.
 The helper is not the realtime conversational agent. It provides local contracts
 that support the frontend, validation workflows, and smoke tests.
 
-| Endpoint                       | Contract                                                                                                                                                                     |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /health`                  | Reports LiveKit, OpenMRS, Ollama, agent, STT/TTS, token signing, CORS, local storage, draft audit, and production readiness status.                                          |
-| `POST /token`                  | Returns an HS256 LiveKit JWT with a room-scoped join grant and optional room metadata sync.                                                                                  |
-| `GET /ai/runtime-config`       | Returns the persisted room-scoped STT/TTS provider settings and whether required provider secrets are configured.                                                            |
-| `POST /ai/runtime-config`      | Saves room-scoped provider settings after validating that required cloud provider secrets exist in the helper environment.                                                   |
-| `POST /compile-encounter`      | Requires `transcript` or `text`, redacts PHI-like text, and compiles a clinician-reviewable OpenMRS draft using Ollama when available or deterministic heuristics otherwise. |
-| `POST /synthetic-consultation` | Generates deterministic synthetic dialogue, redacted transcript, draft, and an `openmrsDraftRequest` for validation and e2e tests.                                           |
-| `POST /recording/session`      | Records a consent manifest for future recording workflow; it does not capture or store raw audio by default.                                                                 |
-| `POST /openmrs/draft`          | Queues a draft locally by default and can optionally create an OpenMRS encounter through `/openmrs/ws/rest/v1`.                                                              |
+| Endpoint                       | Contract                                                                                                                                                                                        |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`                  | Reports LiveKit, OpenMRS, Ollama, agent, STT/TTS, token signing, CORS, local storage, draft audit, and production readiness status. Protected by OpenMRS session validation in production mode. |
+| `POST /token`                  | Returns an HS256 LiveKit JWT with a room-scoped join grant and optional room metadata sync.                                                                                                     |
+| `GET /ai/runtime-config`       | Returns the persisted room-scoped STT/TTS provider settings and whether required provider secrets are configured.                                                                               |
+| `POST /ai/runtime-config`      | Saves room-scoped provider settings after validating that required cloud provider secrets exist in the helper environment.                                                                      |
+| `POST /compile-encounter`      | Requires `transcript` or `text`, redacts PHI-like text, and compiles a clinician-reviewable OpenMRS draft using Ollama when available or deterministic heuristics otherwise.                    |
+| `POST /synthetic-consultation` | Generates deterministic synthetic dialogue, redacted transcript, draft, and an `openmrsDraftRequest` for validation and e2e tests.                                                              |
+| `POST /recording/session`      | Records a consent manifest for future recording workflow; it does not capture or store raw audio by default.                                                                                    |
+| `POST /openmrs/draft`          | Queues a draft locally by default and can optionally create an OpenMRS encounter through `/openmrs/ws/rest/v1`.                                                                                 |
 
 Important helper environment variables:
 
@@ -289,8 +289,11 @@ To request a real OpenMRS write, send `writeToOpenmrs: true` or
 and required OpenMRS metadata are configured. Real writes also require a
 `visitUuid` for an active visit belonging to the patient; drafts without an
 active visit remain queued for review. Authentication can come from
-`OPENMRS_USERNAME` and `OPENMRS_PASSWORD`, `OPENMRS_BASIC_AUTH`, or the forwarded
-OpenMRS browser session cookie.
+the forwarded OpenMRS browser session cookie or Authorization header. Server
+credentials (`OPENMRS_USERNAME` / `OPENMRS_PASSWORD` or `OPENMRS_BASIC_AUTH`) are
+for validation and trusted server-to-server deployments; set
+`OPENMRS_DRAFT_WRITE_ALLOW_SERVER_CREDENTIALS=true` only when server-credential
+writes are intentional.
 
 Draft lifecycle audit event types:
 
@@ -364,7 +367,7 @@ Verify:
 
 ```bash
 docker compose ps
-curl http://<openmrs-host>/openmrs/livekit/health
+curl -u "$OPENMRS_USERNAME:$OPENMRS_PASSWORD" http://<openmrs-host>/openmrs/livekit/health
 docker logs openmrs-distro-referenceapplication-livekit-helper-1
 docker logs openmrs-distro-referenceapplication-livekit-agent-cpu-1
 ```

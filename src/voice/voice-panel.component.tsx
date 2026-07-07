@@ -53,6 +53,7 @@ import { mergeEncounterDraft } from '../clinical/encounter-draft';
 import AudioVisualizer from '../audio/audio-visualizer.component';
 import PatientContext from '../patient/patient-context.component';
 import type { Config } from '../config-schema';
+import { buildPatientEncountersUrl } from './openmrs-url';
 import styles from './voice-panel.scss';
 
 interface VoicePanelProps {
@@ -1452,12 +1453,6 @@ function formatConfidence(confidence: number): string {
     return 'Review';
   }
   return `${Math.round(confidence * 100)}%`;
-}
-
-function buildPatientEncountersUrl(patientUuid: string, encounterUuid: string): string {
-  const patient = encodeURIComponent(patientUuid);
-  const encounter = encodeURIComponent(encounterUuid);
-  return `\${openmrsSpaBase}/patient/${patient}/chart/encounters?encounterUuid=${encounter}`;
 }
 
 export default VoicePanel;

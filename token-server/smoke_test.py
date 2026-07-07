@@ -18,14 +18,23 @@ from typing import Any
 BASE_URL = os.environ.get("TOKEN_SERVER_SMOKE_URL", "http://127.0.0.1:7890").rstrip("/")
 PATIENT_UUID = os.environ.get("TOKEN_SERVER_SMOKE_PATIENT_UUID", "synthetic-smoke-patient")
 ROOM_PREFIX = os.environ.get("TOKEN_SERVER_SMOKE_ROOM_PREFIX", "openmrs-voice-")
+AUTHORIZATION = os.environ.get("TOKEN_SERVER_SMOKE_AUTHORIZATION", "").strip()
+if not AUTHORIZATION and os.environ.get("OPENMRS_USERNAME") and os.environ.get("OPENMRS_PASSWORD"):
+    encoded = base64.b64encode(
+        f"{os.environ['OPENMRS_USERNAME']}:{os.environ['OPENMRS_PASSWORD']}".encode("utf-8")
+    ).decode("ascii")
+    AUTHORIZATION = f"Basic {encoded}"
 
 
 def request_json(path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     data = None if payload is None else json.dumps(payload).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if AUTHORIZATION:
+        headers["Authorization"] = AUTHORIZATION
     request = urllib.request.Request(
         f"{BASE_URL}{path}",
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST" if payload is not None else "GET",
     )
     with urllib.request.urlopen(request, timeout=10) as response:

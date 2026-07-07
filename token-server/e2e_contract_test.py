@@ -36,6 +36,8 @@ def free_port() -> int:
 
 class FakeOpenMRSHandler(BaseHTTPRequestHandler):
     encounter_payloads: list[dict[str, Any]] = []
+    encounter_authorizations: list[str | None] = []
+    denied_encounter_authorizations: set[str] = set()
 
     def do_GET(self):
         if self.path.startswith("/openmrs/ws/rest/v1/session"):
@@ -108,6 +110,14 @@ class FakeOpenMRSHandler(BaseHTTPRequestHandler):
                     }
                 )
                 return
+            if visit_uuid == "visit-without-patient-uuid":
+                self.send_json(
+                    {
+                        "uuid": "visit-without-patient-uuid",
+                        "stopDatetime": None,
+                    }
+                )
+                return
             self.send_json(
                 {
                     "uuid": visit_uuid,
@@ -120,6 +130,11 @@ class FakeOpenMRSHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/openmrs/ws/rest/v1/encounter":
+            authorization = self.headers.get("Authorization")
+            FakeOpenMRSHandler.encounter_authorizations.append(authorization)
+            if authorization in FakeOpenMRSHandler.denied_encounter_authorizations:
+                self.send_json({"error": "encounter create forbidden"}, status=403)
+                return
             payload = self.read_json()
             FakeOpenMRSHandler.encounter_payloads.append(payload)
             self.send_json({"uuid": "encounter-created", "display": "AI Draft Encounter"}, status=201)
@@ -380,6 +395,9 @@ class TokenServerE2ETest(unittest.TestCase):
     def setUp(self):
         runtime_config_path = Path(self.tempdir.name) / "ai-runtime-config.json"
         runtime_config_path.unlink(missing_ok=True)
+        FakeOpenMRSHandler.encounter_payloads = []
+        FakeOpenMRSHandler.encounter_authorizations = []
+        FakeOpenMRSHandler.denied_encounter_authorizations = set()
 
     @classmethod
     def tearDownClass(cls):
@@ -440,6 +458,14 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["services"]["localStorage"]["status"], "private_files")
         self.assertEqual(payload["services"]["localStorage"]["fileMode"], "0600")
         self.assertTrue(payload["services"]["localStorage"]["auditLogPath"].endswith("audit.jsonl"))
+
+    def test_health_requires_authenticated_openmrs_session_when_enabled(self):
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(self.base_url, "/health", authenticated=False)
+
+        self.assertEqual(context.exception.code, 401)
+        payload = read_http_error_json(context.exception)
+        self.assertEqual(payload["code"], "openmrs_session_required")
 
     def test_token_requires_authenticated_openmrs_session_when_enabled(self):
         with self.assertRaises(urllib.error.HTTPError) as context:
@@ -773,6 +799,12 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["status"], "saved")
         self.assertEqual(payload["openmrsWrite"], "created")
         self.assertEqual(payload["encounterUuid"], "encounter-created")
+        self.assertEqual(payload["openmrs"]["authSource"], "request_authorization")
+        self.assertNotIn("encounterPayload", payload["openmrs"])
+        self.assertNotIn("session", payload["openmrs"])
+        self.assertNotIn("patientCheck", payload["openmrs"])
+        self.assertNotIn("visitCheck", payload["openmrs"])
+        self.assertNotIn("createEncounter", payload["openmrs"])
         created = FakeOpenMRSHandler.encounter_payloads[-1]
         self.assertEqual(created["patient"], "patient-uuid")
         self.assertEqual(created["visit"], "active-visit-uuid")
@@ -806,7 +838,7 @@ class TokenServerE2ETest(unittest.TestCase):
 
         self.assertEqual(payload["status"], "validated")
         self.assertTrue(payload["enabled"])
-        self.assertEqual(payload["authSource"], "server_credentials")
+        self.assertEqual(payload["authSource"], "request_authorization")
         self.assertEqual(payload["requiredConfiguration"], [])
         self.assertEqual(payload["validationErrors"], [])
         self.assertEqual(payload["resources"]["encounterType"]["display"], "Visit Note")
@@ -814,6 +846,76 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["resources"]["draftObsConcept"]["datatype"], "Text")
         self.assertFalse(payload["rawClinicalTextStored"])
         self.assertNotIn("Admin123", json.dumps(payload))
+
+    def test_openmrs_draft_write_uses_request_credentials_instead_of_server_credentials(self):
+        user_auth = "Basic " + base64.b64encode(b"limited-user:User123").decode("ascii")
+        FakeOpenMRSHandler.denied_encounter_authorizations = {user_auth}
+
+        payload, _response = request_json(
+            self.base_url,
+            "/openmrs/draft",
+            {
+                "patientUuid": "patient-uuid",
+                "visitUuid": "active-visit-uuid",
+                "writeToOpenmrs": True,
+                "draft": {
+                    "chiefComplaint": "cough",
+                    "symptoms": ["cough"],
+                    "medicationsMentioned": [],
+                    "allergiesMentioned": [],
+                    "assessmentNotes": "review",
+                    "patientInstructions": "fluids",
+                },
+                "redactedTranscript": "Doctor: cough",
+            },
+            headers={"Authorization": user_auth},
+        )
+
+        self.assertEqual(payload["status"], "queued")
+        self.assertEqual(payload["openmrsWrite"], "failed")
+        self.assertEqual(payload["auditEventType"], "draft_write_rejected")
+        self.assertEqual(payload["openmrs"]["authSource"], "request_authorization")
+        self.assertEqual(FakeOpenMRSHandler.encounter_authorizations, [user_auth])
+        self.assertEqual(FakeOpenMRSHandler.encounter_payloads, [])
+
+    def test_openmrs_draft_write_ignores_request_metadata_overrides(self):
+        auth = base64.b64encode(b"admin:Admin123").decode("ascii")
+        payload, _response = request_json(
+            self.base_url,
+            "/openmrs/draft",
+            {
+                "patientUuid": "patient-uuid",
+                "visitUuid": "active-visit-uuid",
+                "writeToOpenmrs": True,
+                "encounterTypeUuid": "malicious-encounter-type",
+                "locationUuid": "malicious-location",
+                "providerUuid": "malicious-provider",
+                "encounterRoleUuid": "malicious-role",
+                "draftObsConceptUuid": "malicious-draft-obs",
+                "structuredObsConcepts": {
+                    "symptoms": "malicious-symptom-concept",
+                },
+                "draft": {
+                    "chiefComplaint": "cough",
+                    "symptoms": ["cough"],
+                    "medicationsMentioned": [],
+                    "allergiesMentioned": [],
+                    "assessmentNotes": "review",
+                    "patientInstructions": "fluids",
+                },
+                "redactedTranscript": "Doctor: cough",
+            },
+            headers={"Authorization": f"Basic {auth}"},
+        )
+
+        self.assertEqual(payload["openmrsWrite"], "created")
+        created = FakeOpenMRSHandler.encounter_payloads[-1]
+        self.assertEqual(created["encounterType"], "encounter-type-uuid")
+        self.assertEqual(created["location"], "location-uuid")
+        self.assertEqual(created["encounterProviders"][0]["provider"], "provider-uuid")
+        self.assertEqual(created["encounterProviders"][0]["encounterRole"], "encounter-role-uuid")
+        self.assertEqual(created["obs"][0]["concept"], "obs-concept-uuid")
+        self.assertNotIn("malicious", json.dumps(created))
 
     def test_openmrs_draft_write_requires_active_visit(self):
         auth = base64.b64encode(b"admin:Admin123").decode("ascii")
@@ -844,6 +946,33 @@ class TokenServerE2ETest(unittest.TestCase):
         )
         self.assertEqual(audit_event["eventType"], "draft_write_rejected")
         self.assertEqual(audit_event["openmrsWrite"], "visit_required")
+
+    def test_openmrs_draft_write_rejects_visit_without_patient_reference(self):
+        auth = base64.b64encode(b"admin:Admin123").decode("ascii")
+        payload, _response = request_json(
+            self.base_url,
+            "/openmrs/draft",
+            {
+                "patientUuid": "patient-uuid",
+                "visitUuid": "visit-without-patient-uuid",
+                "writeToOpenmrs": True,
+                "draft": {
+                    "chiefComplaint": "cough",
+                    "symptoms": ["cough"],
+                    "medicationsMentioned": [],
+                    "allergiesMentioned": [],
+                    "assessmentNotes": "review",
+                    "patientInstructions": "fluids",
+                },
+                "redactedTranscript": "Doctor: cough",
+            },
+            headers={"Authorization": f"Basic {auth}"},
+        )
+
+        self.assertEqual(payload["status"], "queued")
+        self.assertEqual(payload["openmrsWrite"], "visit_required")
+        self.assertEqual(payload["auditEventType"], "draft_write_rejected")
+        self.assertEqual(FakeOpenMRSHandler.encounter_payloads, [])
 
     def test_openmrs_draft_queue_creates_minimal_audit_event(self):
         payload, _response = request_json(

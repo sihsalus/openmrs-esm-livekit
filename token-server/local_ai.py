@@ -47,6 +47,10 @@ OPENMRS_STRUCTURED_OBS_CONCEPTS = os.environ.get("OPENMRS_STRUCTURED_OBS_CONCEPT
 OPENMRS_BASIC_AUTH = os.environ.get("OPENMRS_BASIC_AUTH", "").strip()
 OPENMRS_USERNAME = os.environ.get("OPENMRS_USERNAME", "").strip()
 OPENMRS_PASSWORD = os.environ.get("OPENMRS_PASSWORD", "")
+OPENMRS_DRAFT_WRITE_ALLOW_SERVER_CREDENTIALS = os.environ.get(
+    "OPENMRS_DRAFT_WRITE_ALLOW_SERVER_CREDENTIALS",
+    "false",
+).lower() in {"1", "true", "yes", "on"}
 
 DEMO_TRANSCRIPT = (
     "Doctor: Joshua has had cough, fever, and sore throat for two days. "
@@ -466,7 +470,7 @@ def queue_openmrs_draft(body: dict[str, Any], context: dict[str, Any] | None = N
         "openmrsWrite": openmrs["writeStatus"],
         "encounterUuid": openmrs.get("encounterUuid"),
         "message": openmrs["message"],
-        "openmrs": openmrs,
+        "openmrs": _public_openmrs_result(openmrs),
     }
 
 
@@ -697,6 +701,21 @@ def _sanitize_draft_audit_event(event: dict[str, Any]) -> dict[str, Any]:
     return {key: event.get(key) for key in allowed if key in event}
 
 
+def _public_openmrs_result(openmrs: dict[str, Any]) -> dict[str, Any]:
+    allowed = (
+        "writeRequested",
+        "writeEnabled",
+        "writeStatus",
+        "message",
+        "authSource",
+        "authenticated",
+        "encounterUuid",
+        "requiredConfiguration",
+        "requiredRequestContext",
+    )
+    return {key: openmrs.get(key) for key in allowed if key in openmrs}
+
+
 def _safe_int(value: Any) -> int:
     try:
         return int(value or 0)
@@ -709,10 +728,13 @@ def build_openmrs_draft_integration(
 ) -> dict[str, Any]:
     write_requested = _write_requested(body)
     payload = _build_encounter_payload(body, record.get("draft") or {}, record.get("redactedTranscript"))
-    missing = _openmrs_missing_write_config(body)
+    missing = _openmrs_missing_write_config()
     patient_uuid = str(body.get("patientUuid") or record.get("patientUuid") or "").strip()
     visit_uuid = _visit_uuid(body)
-    auth_headers = _openmrs_auth_headers(context)
+    auth_headers = _openmrs_auth_headers(
+        context,
+        allow_server_credentials=OPENMRS_DRAFT_WRITE_ALLOW_SERVER_CREDENTIALS,
+    )
 
     result: dict[str, Any] = {
         "writeRequested": write_requested,
@@ -720,7 +742,10 @@ def build_openmrs_draft_integration(
         "writeStatus": "queued_only",
         "message": "Draft queued locally for clinician review. It has not been written to OpenMRS.",
         "restBase": f"{OPENMRS_BASE_URL}/ws/rest/v1",
-        "authSource": _auth_source(context),
+        "authSource": _auth_source(
+            context,
+            allow_server_credentials=OPENMRS_DRAFT_WRITE_ALLOW_SERVER_CREDENTIALS,
+        ),
         "authenticated": None,
         "requiredConfiguration": missing,
         "requiredRequestContext": ["visitUuid"],
@@ -770,7 +795,7 @@ def build_openmrs_draft_integration(
         result.update(
             {
                 "writeStatus": "auth_required",
-                "message": "OpenMRS write requested, but no OpenMRS Authorization header, session cookie, or server credentials were available.",
+                "message": "OpenMRS write requested, but no forwarded OpenMRS Authorization header or session cookie was available.",
             }
         )
         return result
@@ -910,12 +935,12 @@ def _build_encounter_payload(
     normalized = _normalize_draft(draft if isinstance(draft, dict) else {})
     encounter_datetime = str(body.get("encounterDatetime") or _openmrs_datetime())
     patient_uuid = str(body.get("patientUuid") or "").strip()
-    encounter_type = _body_or_env(body, "encounterTypeUuid", OPENMRS_ENCOUNTER_TYPE_UUID)
-    location = _body_or_env(body, "locationUuid", OPENMRS_LOCATION_UUID)
-    provider = _body_or_env(body, "providerUuid", OPENMRS_PROVIDER_UUID)
-    encounter_role = _body_or_env(body, "encounterRoleUuid", OPENMRS_ENCOUNTER_ROLE_UUID)
-    draft_obs_concept = _body_or_env(body, "draftObsConceptUuid", OPENMRS_DRAFT_OBS_CONCEPT_UUID)
-    structured_concepts = _structured_obs_concepts(body)
+    encounter_type = OPENMRS_ENCOUNTER_TYPE_UUID
+    location = OPENMRS_LOCATION_UUID
+    provider = OPENMRS_PROVIDER_UUID
+    encounter_role = OPENMRS_ENCOUNTER_ROLE_UUID
+    draft_obs_concept = OPENMRS_DRAFT_OBS_CONCEPT_UUID
+    structured_concepts = _structured_obs_concepts()
 
     payload: dict[str, Any] = {
         "encounterDatetime": encounter_datetime,
@@ -945,14 +970,11 @@ def _build_encounter_payload(
     return {key: value for key, value in payload.items() if value not in (None, "", [])}
 
 
-def _structured_obs_concepts(body: dict[str, Any]) -> dict[str, str]:
+def _structured_obs_concepts() -> dict[str, str]:
     concepts: dict[str, str] = {}
     env_concepts = _json_object(OPENMRS_STRUCTURED_OBS_CONCEPTS)
-    request_concepts = body.get("structuredObsConcepts")
     if isinstance(env_concepts, dict):
         concepts.update(_string_map(env_concepts))
-    if isinstance(request_concepts, dict):
-        concepts.update(_string_map(request_concepts))
     return concepts
 
 
@@ -1041,20 +1063,12 @@ def _openmrs_write_status() -> dict[str, Any]:
 
 
 def _openmrs_missing_write_config(body: dict[str, Any] | None = None) -> list[str]:
-    body = body or {}
     required = [
-        ("OPENMRS_ENCOUNTER_TYPE_UUID or encounterTypeUuid", _body_or_env(body, "encounterTypeUuid", OPENMRS_ENCOUNTER_TYPE_UUID)),
-        ("OPENMRS_LOCATION_UUID or locationUuid", _body_or_env(body, "locationUuid", OPENMRS_LOCATION_UUID)),
-        ("OPENMRS_DRAFT_OBS_CONCEPT_UUID or draftObsConceptUuid", _body_or_env(body, "draftObsConceptUuid", OPENMRS_DRAFT_OBS_CONCEPT_UUID)),
+        ("OPENMRS_ENCOUNTER_TYPE_UUID", OPENMRS_ENCOUNTER_TYPE_UUID),
+        ("OPENMRS_LOCATION_UUID", OPENMRS_LOCATION_UUID),
+        ("OPENMRS_DRAFT_OBS_CONCEPT_UUID", OPENMRS_DRAFT_OBS_CONCEPT_UUID),
     ]
     return [name for name, value in required if not value]
-
-
-def _body_or_env(body: dict[str, Any], body_key: str, env_value: str) -> str:
-    value = body.get(body_key)
-    if value is None:
-        return env_value
-    return str(value).strip() or env_value
 
 
 def _visit_uuid(body: dict[str, Any]) -> str:
@@ -1067,32 +1081,41 @@ def _write_requested(body: dict[str, Any]) -> bool:
     return str(body.get("mode") or body.get("openmrsWrite") or "").lower() in {"write", "true", "enabled"}
 
 
-def _openmrs_auth_headers(context: dict[str, Any]) -> dict[str, str]:
+def _openmrs_auth_headers(
+    context: dict[str, Any],
+    *,
+    allow_server_credentials: bool = True,
+) -> dict[str, str]:
     headers: dict[str, str] = {}
-    if OPENMRS_BASIC_AUTH:
+
+    if context.get("authorization"):
+        headers["Authorization"] = str(context["authorization"])
+    elif allow_server_credentials and OPENMRS_BASIC_AUTH:
         headers["Authorization"] = (
             OPENMRS_BASIC_AUTH
             if OPENMRS_BASIC_AUTH.lower().startswith(("basic ", "bearer "))
             else f"Basic {OPENMRS_BASIC_AUTH}"
         )
-    elif OPENMRS_USERNAME and OPENMRS_PASSWORD:
+    elif allow_server_credentials and OPENMRS_USERNAME and OPENMRS_PASSWORD:
         token = base64.b64encode(f"{OPENMRS_USERNAME}:{OPENMRS_PASSWORD}".encode("utf-8")).decode("ascii")
         headers["Authorization"] = f"Basic {token}"
-    elif context.get("authorization"):
-        headers["Authorization"] = str(context["authorization"])
 
     if context.get("cookie"):
         headers["Cookie"] = str(context["cookie"])
     return headers
 
 
-def _auth_source(context: dict[str, Any]) -> str:
-    if OPENMRS_BASIC_AUTH or (OPENMRS_USERNAME and OPENMRS_PASSWORD):
-        return "server_credentials"
+def _auth_source(
+    context: dict[str, Any],
+    *,
+    allow_server_credentials: bool = True,
+) -> str:
     if context.get("authorization"):
         return "request_authorization"
     if context.get("cookie"):
         return "request_cookie"
+    if allow_server_credentials and (OPENMRS_BASIC_AUTH or (OPENMRS_USERNAME and OPENMRS_PASSWORD)):
+        return "server_credentials"
     return "none"
 
 
@@ -1104,7 +1127,9 @@ def _active_visit_matches_patient(visit: Any, patient_uuid: str) -> bool:
     patient = visit.get("patient")
     if isinstance(patient, dict):
         return str(patient.get("uuid") or "").strip() == patient_uuid
-    return True
+    if isinstance(patient, str):
+        return patient.strip() == patient_uuid
+    return False
 
 
 def _openmrs_request(
