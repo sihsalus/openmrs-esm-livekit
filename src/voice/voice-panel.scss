@@ -56,6 +56,73 @@
   }
 }
 
+.flowPreviewCard {
+  display: grid;
+  gap: layout.$spacing-04;
+  width: 100%;
+}
+
+.flowPreviewHeader {
+  display: grid;
+  gap: layout.$spacing-02;
+
+  h5 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  p {
+    color: var(--cds-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    margin: 0;
+  }
+}
+
+.flowPreviewList {
+  display: grid;
+  gap: layout.$spacing-02;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  li {
+    align-items: start;
+    background: var(--cds-layer-02);
+    display: grid;
+    gap: layout.$spacing-03;
+    grid-template-columns: auto 1fr;
+    min-height: 4.5rem;
+    padding: layout.$spacing-03;
+  }
+
+  strong {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  li div > span {
+    color: var(--cds-text-secondary);
+    display: block;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    margin-top: layout.$spacing-01;
+  }
+}
+
+.flowPreviewIndex {
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  min-width: 1rem;
+  text-align: center;
+}
+
 .preflightActions {
   justify-content: flex-end;
   width: 100%;
@@ -196,6 +263,40 @@
   }
 }
 
+.sectionTitleWithHelp {
+  align-items: center;
+  display: flex;
+  gap: layout.$spacing-02;
+}
+
+.infoButton,
+.stepInfoButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--cds-icon-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  height: 1.5rem;
+  justify-content: center;
+  padding: 0;
+  width: 1.5rem;
+
+  svg {
+    fill: currentColor;
+  }
+
+  &:hover,
+  &:focus {
+    color: var(--cds-icon-primary);
+  }
+
+  &:focus {
+    outline: 2px solid var(--cds-focus);
+    outline-offset: 2px;
+  }
+}
+
 .headerActions {
   display: flex;
   align-items: center;
@@ -234,18 +335,17 @@
   padding: layout.$spacing-04;
   background: var(--cds-layer-02);
   border-left: 3px solid var(--cds-border-interactive);
+}
+
+.roomLanguageHeading {
+  align-items: center;
+  display: flex;
+  gap: layout.$spacing-02;
 
   > span {
     color: var(--cds-text-secondary);
     font-size: 0.75rem;
     font-weight: 600;
-  }
-
-  p {
-    color: var(--cds-text-secondary);
-    font-size: 0.8125rem;
-    line-height: 1.4;
-    margin: 0;
   }
 }
 
@@ -325,6 +425,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1 1 auto;
 }
 
 .stepTitle {
@@ -332,10 +433,9 @@
   font-weight: 500;
 }
 
-.stepDetail {
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-  line-height: 1.3;
+.stepInfoButton {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 /* ---- Transcript ---- */
