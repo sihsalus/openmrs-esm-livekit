@@ -20,7 +20,9 @@ can be forwarded to the helper when `TOKEN_SERVER_REQUIRE_OPENMRS_SESSION=true`.
 
 ### GET /health
 
-Returns local service status for the frontend status panel.
+Returns local service status for the frontend status panel. When
+`TOKEN_SERVER_REQUIRE_OPENMRS_SESSION=true`, this endpoint also requires a
+forwarded OpenMRS session.
 
 ```json
 {
@@ -101,7 +103,8 @@ defaults (`devkey` / `secret`), missing OpenMRS session validation, missing CORS
 allowlists, and non-HTTPS allowlisted origins except localhost/loopback.
 
 In development mode, CORS remains permissive for local development but `/health`
-returns a warning until `TOKEN_SERVER_ALLOWED_ORIGINS` is configured.
+returns a warning until `TOKEN_SERVER_ALLOWED_ORIGINS` is configured. In
+production mode, `/health` is part of the OpenMRS-session-protected endpoint set.
 
 ## Local storage
 
@@ -314,7 +317,7 @@ Without explicit consent the endpoint returns `consent_required` and does not cr
 
 Queues a draft locally for clinician review and can optionally create an OpenMRS encounter through the OpenMRS REST API at `/openmrs/ws/rest/v1`.
 
-By default this endpoint is safe: it queues locally and returns a preview of the OpenMRS encounter payload without writing to OpenMRS.
+By default this endpoint is safe: it queues locally and returns only a sanitized OpenMRS write summary without writing to OpenMRS.
 
 ```json
 {
@@ -327,13 +330,8 @@ By default this endpoint is safe: it queues locally and returns a preview of the
   "openmrs": {
     "writeRequested": false,
     "writeEnabled": false,
-    "encounterPayload": {
-      "encounterDatetime": "2026-06-20T18:10:00.000+0000",
-      "patient": "aefc6e8d-fdc7-430f-9dae-a1dcbff2cdec",
-      "encounterType": "...",
-      "location": "...",
-      "obs": [{ "concept": "...", "value": "AI-generated clinical draft..." }]
-    }
+    "writeStatus": "queued_only",
+    "message": "Draft queued locally for clinician review. It has not been written to OpenMRS."
   }
 }
 ```
@@ -357,9 +355,9 @@ OPENMRS_ENCOUNTER_ROLE_UUID=<encounter-role-uuid>
 OPENMRS_STRUCTURED_OBS_CONCEPTS='{"chiefComplaint":"...","symptoms":"...","medicationsMentioned":"...","allergiesMentioned":"...","assessmentNotes":"...","patientInstructions":"..."}'
 ```
 
-`OPENMRS_DRAFT_OBS_CONCEPT_UUID` keeps the full reviewable text note. Structured concept mappings are additive: when configured, the helper also emits one obs per mapped scalar or list item. A request can override or add mappings with a `structuredObsConcepts` object using the same keys.
+`OPENMRS_DRAFT_OBS_CONCEPT_UUID` keeps the full reviewable text note. Structured concept mappings are additive: when configured, the helper also emits one obs per mapped scalar or list item. Encounter type, location, provider, encounter role, draft obs concept, and structured obs mappings are server-side configuration; browser requests cannot override them.
 
-Authentication can be supplied either by server environment or forwarded from the O3 frontend request:
+Configuration validation can use server-managed OpenMRS credentials:
 
 ```bash
 OPENMRS_USERNAME=<username>
@@ -368,7 +366,7 @@ OPENMRS_PASSWORD=<password>
 OPENMRS_BASIC_AUTH=<base64-user-password-or-full-Basic-header>
 ```
 
-For browser session forwarding, call the helper with `credentials: 'include'`. The helper accepts the OpenMRS session cookie and validates it against `GET /openmrs/ws/rest/v1/session` before attempting `POST /openmrs/ws/rest/v1/encounter`.
+For browser session forwarding, call the helper with `credentials: 'include'`. The helper accepts the OpenMRS session cookie and validates it against `GET /openmrs/ws/rest/v1/session` before attempting `POST /openmrs/ws/rest/v1/encounter`. Real draft writes use forwarded request credentials by default. Set `OPENMRS_DRAFT_WRITE_ALLOW_SERVER_CREDENTIALS=true` only for a trusted server-to-server deployment where server-credential writes are intentional.
 
 Queued drafts are stored in `/tmp/openmrs-livekit-drafts.jsonl`. They include
 the redacted transcript and clinician-reviewable draft. Draft lifecycle audit

@@ -137,8 +137,8 @@ TOKEN_SERVER_ALLOWED_ORIGINS=https://openmrs.example.org
 The base gateway exposes helper endpoints at both `/openmrs/livekit/*` and
 `/livekit/*`. The frontend is configured to use `/openmrs/livekit/token` so
 OpenMRS session cookies scoped to `/openmrs` can reach the helper when session
-validation is enabled. Keep `/livekit/*` for compatibility and direct health
-probes through the gateway.
+validation is enabled. Keep `/livekit/*` for compatibility; health probes need a
+forwarded OpenMRS session when production session validation is enabled.
 
 The helper mirrors the real-time agent provider names with
 `LIVEKIT_AGENT_LLM_PROVIDER`, `LIVEKIT_AGENT_STT_PROVIDER`, and
@@ -220,7 +220,7 @@ docker compose \
 
 ```bash
 docker compose ps
-curl http://<openmrs-host>/openmrs/livekit/health
+curl -u "$OPENMRS_USERNAME:$OPENMRS_PASSWORD" http://<openmrs-host>/openmrs/livekit/health
 docker logs openmrs-distro-referenceapplication-livekit-helper-1
 docker logs openmrs-distro-referenceapplication-livekit-agent-cpu-1
 ```

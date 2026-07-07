@@ -98,6 +98,7 @@ ALLOWED_ORIGINS = parse_allowed_origins(
 )
 TOKEN_SERVER_REQUIRE_OPENMRS_SESSION = env_flag("TOKEN_SERVER_REQUIRE_OPENMRS_SESSION")
 OPENMRS_SESSION_AUTH_PATHS = {
+    "/health",
     "/token",
     "/openmrs/draft",
     "/openmrs/draft/audit",

@@ -419,7 +419,7 @@ const LivekitConfigurationPage: React.FC = () => {
                   </div>
                   <div>
                     <dt>{t('speakerAttribution', 'Speaker attribution')}</dt>
-                    <dd>{t('sourceRoleWithSttSpeakerId', 'source-role + STT speaker_id')}</dd>
+                    <dd>{attributionTag.label}</dd>
                   </div>
                   <div>
                     <dt>{t('roomPrefix', 'Room prefix')}</dt>

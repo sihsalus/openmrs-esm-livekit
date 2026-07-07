@@ -371,7 +371,7 @@ describe('LivekitConfigurationPage', () => {
 
     expect((await screen.findAllByText('Cloud STT active')).length).toBeGreaterThan(0);
     expect(screen.getByText('Deepgram STT')).toBeInTheDocument();
-    expect(screen.getByText('STT speaker IDs')).toBeInTheDocument();
+    expect(screen.getAllByText('STT speaker IDs').length).toBeGreaterThan(0);
 
     const fluxToggle = screen.getByLabelText('Deepgram Flux') as HTMLInputElement;
     const diarizationToggle = screen.getByLabelText('Deepgram diarization') as HTMLInputElement;
@@ -383,6 +383,6 @@ describe('LivekitConfigurationPage', () => {
     expect(fluxToggle).toBeChecked();
     expect(diarizationToggle).not.toBeChecked();
     expect(screen.getByText('Deepgram Flux STT')).toBeInTheDocument();
-    expect(screen.getByText('Source-role fallback')).toBeInTheDocument();
+    expect(screen.getAllByText('Source-role fallback').length).toBeGreaterThan(0);
   });
 });
