@@ -87,6 +87,26 @@ export interface OpenmrsDraftResult {
   message?: string;
 }
 
+export interface CompileEncounterPayload {
+  transcript?: string;
+  text?: string;
+  patientName?: string;
+  clinicianName?: string;
+  doctorName?: string;
+}
+
+export interface CompileEncounterResult {
+  status: 'ok' | 'error';
+  engine?: string;
+  model?: string | null;
+  redactedTranscript?: string;
+  draft?: OpenmrsDraftPayload['draft'];
+  privacy?: Record<string, unknown>;
+  warnings?: string[];
+  error?: string;
+  message?: string;
+}
+
 export interface OpenmrsDraftConfigResource {
   uuid?: string | null;
   display?: string | null;
@@ -213,6 +233,24 @@ export async function saveOpenmrsDraft(
   }
 
   return readJsonResponse<OpenmrsDraftResult>(res, 'Draft save response was not valid JSON');
+}
+
+export async function compileEncounterDraft(
+  tokenEndpoint: string,
+  payload: CompileEncounterPayload,
+): Promise<CompileEncounterResult> {
+  const res = await fetch(resolveTokenServerPath(tokenEndpoint, '/compile-encounter'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(await buildResponseErrorMessage(res, 'Draft compilation failed'));
+  }
+
+  return readJsonResponse<CompileEncounterResult>(res, 'Draft compilation response was not valid JSON');
 }
 
 export async function fetchOpenmrsDraftWriteConfig(tokenEndpoint: string): Promise<OpenmrsDraftWriteConfig> {
