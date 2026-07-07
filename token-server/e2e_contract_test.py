@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TOKEN_SERVER = ROOT / "token-server" / "server.py"
 sys.path.insert(0, str(TOKEN_SERVER.parent))
 import local_ai  # noqa: E402
+import server as token_server  # noqa: E402
 
 
 def free_port() -> int:
@@ -568,6 +569,49 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(context.exception.code, 400)
         payload = read_http_error_json(context.exception)
         self.assertIn("DEEPGRAM_API_KEY is required", payload["error"])
+
+    def test_ai_runtime_config_save_uses_private_json_file(self):
+        payload, _response = request_json(
+            self.base_url,
+            "/ai/runtime-config",
+            {
+                "sttProvider": "whisper",
+                "ttsProvider": "piper",
+                "deepgramModel": "nova-3",
+                "deepgramEnableDiarization": True,
+                "deepgramUseFlux": False,
+                "inworldModel": "inworld-tts-2",
+            },
+        )
+
+        runtime_config_path = Path(self.tempdir.name) / "ai-runtime-config.json"
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(stat.S_IMODE(runtime_config_path.stat().st_mode), 0o600)
+        stored = json.loads(runtime_config_path.read_text(encoding="utf-8"))
+        self.assertEqual(stored["sttProvider"], "whisper")
+        self.assertEqual(stored["ttsProvider"], "piper")
+
+    def test_speaker_attribution_mode_requires_deepgram_diarization_without_flux(self):
+        self.assertEqual(
+            token_server.speaker_attribution_mode_for_config(
+                {
+                    "sttProvider": "deepgram",
+                    "deepgramEnableDiarization": True,
+                    "deepgramUseFlux": False,
+                }
+            ),
+            "source-role+stt-speaker-id",
+        )
+        self.assertEqual(
+            token_server.speaker_attribution_mode_for_config(
+                {
+                    "sttProvider": "deepgram",
+                    "deepgramEnableDiarization": True,
+                    "deepgramUseFlux": True,
+                }
+            ),
+            "source-role",
+        )
 
     def test_token_normalizes_unsupported_language_metadata(self):
         FakeLiveKitHandler.room_requests = []

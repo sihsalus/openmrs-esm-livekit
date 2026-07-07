@@ -125,7 +125,19 @@ const LivekitConfigurationPage: React.FC = () => {
 
   const updateAiRuntimeDraft = useCallback(
     <K extends keyof AiRuntimeConfig>(key: K, value: AiRuntimeConfig[K]) => {
-      setAiRuntimeDraft((current) => (current ? { ...current, [key]: value } : current));
+      setAiRuntimeDraft((current) => {
+        if (!current) {
+          return current;
+        }
+        const next = { ...current, [key]: value };
+        if (key === 'deepgramUseFlux' && value === true) {
+          next.deepgramEnableDiarization = false;
+        }
+        if (key === 'deepgramEnableDiarization' && value === true) {
+          next.deepgramUseFlux = false;
+        }
+        return next;
+      });
     },
     [],
   );
@@ -187,6 +199,12 @@ const LivekitConfigurationPage: React.FC = () => {
     };
   }, [refreshAiRuntimeConfig]);
 
+  const displayedRuntimeConfig = aiRuntimeDraft ?? aiRuntime?.effectiveConfig ?? aiRuntime?.config ?? null;
+  const runtimeModeTag = aiRuntimeModeTag(aiRuntime, displayedRuntimeConfig, t);
+  const sttProviderTag = sttRuntimeTag(displayedRuntimeConfig, t);
+  const ttsProviderTag = ttsRuntimeTag(displayedRuntimeConfig, t);
+  const attributionTag = attributionRuntimeTag(displayedRuntimeConfig, t);
+
   return (
     <main className={`omrs-main-content ${styles.page}`}>
       <header className={styles.pageHeader}>
@@ -219,10 +237,8 @@ const LivekitConfigurationPage: React.FC = () => {
                     </p>
                   </div>
                   <div className={styles.tileActions}>
-                    <Tag type={aiRuntime?.status === 'invalid' ? 'red' : 'green'} size="sm">
-                      {aiRuntime?.status === 'invalid'
-                        ? t('invalidConfiguration', 'Invalid configuration')
-                        : t('localFirst', 'Local first')}
+                    <Tag type={runtimeModeTag.type} size="sm">
+                      {runtimeModeTag.label}
                     </Tag>
                     <Button
                       kind="tertiary"
@@ -293,6 +309,19 @@ const LivekitConfigurationPage: React.FC = () => {
                       />
                       <span>{t('deepgramFlux', 'Deepgram Flux')}</span>
                     </label>
+                    {aiRuntimeDraft.sttProvider === 'deepgram' && (
+                      <p className={styles.runtimeHint}>
+                        {aiRuntimeDraft.deepgramUseFlux
+                          ? t(
+                              'deepgramFluxNoDiarization',
+                              'Flux uses endpointing without speaker IDs in this agent.',
+                            )
+                          : t(
+                              'deepgramDiarizationKeepsFluxOff',
+                              'Diarization keeps Flux off so STT speaker IDs can be used.',
+                            )}
+                      </p>
+                    )}
                     <label>
                       <span>{t('ttsProvider', 'TTS provider')}</span>
                       <select
@@ -348,23 +377,23 @@ const LivekitConfigurationPage: React.FC = () => {
                   </p>
                 )}
                 <div className={styles.pipelinePreview}>
-                  <Tag type="cyan" size="sm">
-                    {t('localAi', 'Local AI')}
+                  <Tag type={runtimeModeTag.type} size="sm">
+                    {runtimeModeTag.label}
                   </Tag>
-                  <Tag type="cyan" size="sm">
-                    {t('sourceAttribution', 'Source attribution')}
+                  <Tag type={attributionTag.type} size="sm">
+                    {attributionTag.label}
                   </Tag>
                   <Tag type="blue" size="sm">
                     {t('livekitAudio', 'LiveKit audio')}
                   </Tag>
-                  <Tag type="purple" size="sm">
-                    {t('localStt', 'Local STT')}
+                  <Tag type={sttProviderTag.type} size="sm">
+                    {sttProviderTag.label}
                   </Tag>
                   <Tag type="cyan" size="sm">
                     {t('clinicalTranslation', 'Clinical translation')}
                   </Tag>
-                  <Tag type="green" size="sm">
-                    {t('localTts', 'Local TTS')}
+                  <Tag type={ttsProviderTag.type} size="sm">
+                    {ttsProviderTag.label}
                   </Tag>
                   <Tag type="gray" size="sm">
                     {t('openmrsDraft', 'OpenMRS draft')}
@@ -682,6 +711,82 @@ function providerOptionLabel(
   const locality = provider.locality === 'cloud' ? t('cloud', 'Cloud') : t('local', 'Local');
   const configured = provider.configured ? '' : ` (${t('notConfigured', 'Not configured')})`;
   return `${provider.label} - ${locality}${configured}`;
+}
+
+type RuntimeTagType = 'red' | 'green' | 'purple' | 'cyan' | 'blue' | 'gray';
+
+interface RuntimeTagSummary {
+  type: RuntimeTagType;
+  label: string;
+}
+
+function aiRuntimeModeTag(
+  response: AiRuntimeConfigResponse | null,
+  config: AiRuntimeConfig | null,
+  t: ReturnType<typeof useTranslation>['t'],
+): RuntimeTagSummary {
+  if (response?.status === 'invalid') {
+    return { type: 'red', label: t('invalidConfiguration', 'Invalid configuration') };
+  }
+  if (!config) {
+    return { type: 'gray', label: t('checking', 'Checking...') };
+  }
+  const cloudStt = config.sttProvider === 'deepgram';
+  const cloudTts = config.ttsProvider === 'inworld';
+  if (cloudStt && cloudTts) {
+    return { type: 'purple', label: t('cloudSttTtsActive', 'Cloud STT + TTS active') };
+  }
+  if (cloudStt) {
+    return { type: 'purple', label: t('cloudSttActive', 'Cloud STT active') };
+  }
+  if (cloudTts) {
+    return { type: 'purple', label: t('cloudTtsActive', 'Cloud TTS active') };
+  }
+  return { type: 'green', label: t('localFirst', 'Local first') };
+}
+
+function sttRuntimeTag(
+  config: AiRuntimeConfig | null,
+  t: ReturnType<typeof useTranslation>['t'],
+): RuntimeTagSummary {
+  if (!config) {
+    return { type: 'gray', label: t('sttPending', 'STT pending') };
+  }
+  if (config.sttProvider === 'deepgram') {
+    return {
+      type: 'purple',
+      label: config.deepgramUseFlux
+        ? t('deepgramFluxStt', 'Deepgram Flux STT')
+        : t('deepgramStt', 'Deepgram STT'),
+    };
+  }
+  return { type: 'cyan', label: t('whisperStt', 'Whisper STT') };
+}
+
+function ttsRuntimeTag(
+  config: AiRuntimeConfig | null,
+  t: ReturnType<typeof useTranslation>['t'],
+): RuntimeTagSummary {
+  if (!config) {
+    return { type: 'gray', label: t('ttsPending', 'TTS pending') };
+  }
+  if (config.ttsProvider === 'inworld') {
+    return { type: 'purple', label: t('inworldTts', 'Inworld TTS') };
+  }
+  return { type: 'green', label: t('piperTts', 'Piper TTS') };
+}
+
+function attributionRuntimeTag(
+  config: AiRuntimeConfig | null,
+  t: ReturnType<typeof useTranslation>['t'],
+): RuntimeTagSummary {
+  if (!config) {
+    return { type: 'gray', label: t('attributionPending', 'Attribution pending') };
+  }
+  if (config.sttProvider === 'deepgram' && config.deepgramEnableDiarization && !config.deepgramUseFlux) {
+    return { type: 'purple', label: t('sttSpeakerIds', 'STT speaker IDs') };
+  }
+  return { type: 'cyan', label: t('sourceRoleFallback', 'Source-role fallback') };
 }
 
 export default LivekitConfigurationPage;
