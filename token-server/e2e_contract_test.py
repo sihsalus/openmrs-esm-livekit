@@ -333,6 +333,7 @@ class TokenServerE2ETest(unittest.TestCase):
                 "LIVEKIT_AGENT_LLM_PROVIDER": "ollama",
                 "LIVEKIT_AGENT_STT_PROVIDER": "whisper",
                 "LIVEKIT_AGENT_TTS_PROVIDER": "piper",
+                "AI_RUNTIME_CONFIG_PATH": str(Path(cls.tempdir.name) / "ai-runtime-config.json"),
                 "DRAFT_STORE_PATH": str(Path(cls.tempdir.name) / "drafts.jsonl"),
                 "RECORDING_MANIFEST_PATH": str(Path(cls.tempdir.name) / "recordings.jsonl"),
                 "AUDIT_LOG_PATH": str(Path(cls.tempdir.name) / "audit.jsonl"),
@@ -375,6 +376,10 @@ class TokenServerE2ETest(unittest.TestCase):
                 time.sleep(0.1)
         raise RuntimeError("token server did not start")
 
+    def setUp(self):
+        runtime_config_path = Path(self.tempdir.name) / "ai-runtime-config.json"
+        runtime_config_path.unlink(missing_ok=True)
+
     @classmethod
     def tearDownClass(cls):
         cls.process.terminate()
@@ -415,6 +420,12 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(payload["services"]["agentCapabilities"]["stt"]["scope"], "livekit_agent")
         self.assertEqual(payload["services"]["agentCapabilities"]["tts"]["provider"], "piper")
         self.assertEqual(payload["services"]["agentCapabilities"]["llm"]["provider"], "ollama")
+        self.assertEqual(payload["services"]["aiRuntimeConfig"]["status"], "configured")
+        self.assertEqual(payload["services"]["aiRuntimeConfig"]["config"]["sttProvider"], "whisper")
+        self.assertEqual(payload["services"]["aiRuntimeConfig"]["config"]["ttsProvider"], "piper")
+        self.assertFalse(
+            payload["services"]["aiRuntimeConfig"]["secrets"]["deepgramApiKeyConfigured"]
+        )
         self.assertEqual(payload["stt"], "configured")
         self.assertEqual(payload["tts"], "configured")
         self.assertEqual(payload["helperStt"], "not_configured")
@@ -515,6 +526,8 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(participant_metadata["captureRole"], "doctor")
         self.assertEqual(participant_metadata["participantRole"], "doctor")
         self.assertEqual(participant_metadata["speakerAttributionMode"], "source-role")
+        self.assertEqual(participant_metadata["agentProviderOverrides"]["sttProvider"], "whisper")
+        self.assertEqual(participant_metadata["agentProviderOverrides"]["ttsProvider"], "piper")
         self.assertEqual(signature_part, expected_signature)
         self.assertNotIn("test-secret", token)
         self.assertEqual(payload["roomMetadata"]["status"], "ok")
@@ -534,6 +547,27 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(room_metadata["languageMode"], "bilingual")
         self.assertEqual(room_metadata["speakerAttributionMode"], "source-role")
         self.assertEqual(room_metadata["defaultHumanRole"], "doctor")
+        self.assertEqual(room_metadata["agentProviderOverrides"]["sttProvider"], "whisper")
+        self.assertEqual(room_metadata["agentProviderOverrides"]["ttsProvider"], "piper")
+
+    def test_ai_runtime_config_rejects_unconfigured_cloud_provider(self):
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(
+                self.base_url,
+                "/ai/runtime-config",
+                {
+                    "sttProvider": "deepgram",
+                    "ttsProvider": "piper",
+                    "deepgramModel": "nova-3",
+                    "deepgramEnableDiarization": True,
+                    "deepgramUseFlux": False,
+                    "inworldModel": "inworld-tts-2",
+                },
+            )
+
+        self.assertEqual(context.exception.code, 400)
+        payload = read_http_error_json(context.exception)
+        self.assertIn("DEEPGRAM_API_KEY is required", payload["error"])
 
     def test_token_normalizes_unsupported_language_metadata(self):
         FakeLiveKitHandler.room_requests = []

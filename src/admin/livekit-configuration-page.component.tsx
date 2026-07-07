@@ -12,8 +12,13 @@ import {
 } from '../livekit/agent-health';
 import { resolveLivekitOperationalConfig } from '../livekit/livekit-config';
 import {
+  fetchAiRuntimeConfig,
   fetchOpenmrsDraftAudit,
   fetchOpenmrsDraftWriteConfig,
+  saveAiRuntimeConfig,
+  type AiRuntimeConfig,
+  type AiRuntimeProviderOption,
+  type AiRuntimeConfigResponse,
   type OpenmrsDraftAuditEvent,
   type OpenmrsDraftAuditResponse,
   type OpenmrsDraftConfigResource,
@@ -32,7 +37,13 @@ const LivekitConfigurationPage: React.FC = () => {
   const [draftAudit, setDraftAudit] = useState<OpenmrsDraftAuditResponse | null>(null);
   const [draftAdminLoading, setDraftAdminLoading] = useState(false);
   const [draftAdminError, setDraftAdminError] = useState<string | null>(null);
+  const [aiRuntime, setAiRuntime] = useState<AiRuntimeConfigResponse | null>(null);
+  const [aiRuntimeDraft, setAiRuntimeDraft] = useState<AiRuntimeConfig | null>(null);
+  const [aiRuntimeLoading, setAiRuntimeLoading] = useState(false);
+  const [aiRuntimeSaving, setAiRuntimeSaving] = useState(false);
+  const [aiRuntimeError, setAiRuntimeError] = useState<string | null>(null);
   const draftAdminRequestId = useRef(0);
+  const aiRuntimeRequestId = useRef(0);
 
   useEffect(() => {
     tRef.current = t;
@@ -80,6 +91,68 @@ const LivekitConfigurationPage: React.FC = () => {
     setDraftAdminLoading(false);
   }, [operationalConfig.tokenEndpoint]);
 
+  const refreshAiRuntimeConfig = useCallback(async () => {
+    const translate = tRef.current;
+    const requestId = aiRuntimeRequestId.current + 1;
+    aiRuntimeRequestId.current = requestId;
+    setAiRuntimeLoading(true);
+    setAiRuntimeError(null);
+    try {
+      const response = await fetchAiRuntimeConfig(operationalConfig.tokenEndpoint);
+      if (aiRuntimeRequestId.current !== requestId) {
+        return;
+      }
+      setAiRuntime(response);
+      setAiRuntimeDraft(response.config);
+    } catch (error) {
+      if (aiRuntimeRequestId.current !== requestId) {
+        return;
+      }
+      setAiRuntime(null);
+      setAiRuntimeDraft(null);
+      setAiRuntimeError(
+        errorMessage(
+          error,
+          translate('aiRuntimeConfigLoadFailed', 'Could not load AI runtime configuration.'),
+        ),
+      );
+    } finally {
+      if (aiRuntimeRequestId.current === requestId) {
+        setAiRuntimeLoading(false);
+      }
+    }
+  }, [operationalConfig.tokenEndpoint]);
+
+  const updateAiRuntimeDraft = useCallback(
+    <K extends keyof AiRuntimeConfig>(key: K, value: AiRuntimeConfig[K]) => {
+      setAiRuntimeDraft((current) => (current ? { ...current, [key]: value } : current));
+    },
+    [],
+  );
+
+  const persistAiRuntimeConfig = useCallback(async () => {
+    if (!aiRuntimeDraft) {
+      return;
+    }
+    const translate = tRef.current;
+    setAiRuntimeSaving(true);
+    setAiRuntimeError(null);
+    try {
+      const response = await saveAiRuntimeConfig(operationalConfig.tokenEndpoint, aiRuntimeDraft);
+      setAiRuntime(response);
+      setAiRuntimeDraft(response.config);
+    } catch (error) {
+      setAiRuntimeError(
+        errorMessage(
+          error,
+          translate('aiRuntimeConfigSaveFailed', 'Could not save AI runtime configuration.'),
+        ),
+      );
+    } finally {
+      setAiRuntimeSaving(false);
+    }
+  }, [aiRuntimeDraft, operationalConfig.tokenEndpoint]);
+
   useEffect(() => {
     let cancelled = false;
     setHealth(checkingHealth());
@@ -107,6 +180,13 @@ const LivekitConfigurationPage: React.FC = () => {
     };
   }, [refreshDraftAdminState]);
 
+  useEffect(() => {
+    refreshAiRuntimeConfig();
+    return () => {
+      aiRuntimeRequestId.current += 1;
+    };
+  }, [refreshAiRuntimeConfig]);
+
   return (
     <main className={`omrs-main-content ${styles.page}`}>
       <header className={styles.pageHeader}>
@@ -129,14 +209,144 @@ const LivekitConfigurationPage: React.FC = () => {
             <div className={styles.grid}>
               <Tile className={`${styles.configTile} ${styles.wideTile}`}>
                 <div className={styles.tileHeader}>
-                  <h2>{t('localAi', 'Local AI')}</h2>
+                  <div>
+                    <h2>{t('localAi', 'Local AI')}</h2>
+                    <p className={styles.description}>
+                      {t(
+                        'aiRuntimeConfigDetail',
+                        'Local providers stay the default; cloud providers are selected per new LiveKit room when configured.',
+                      )}
+                    </p>
+                  </div>
+                  <div className={styles.tileActions}>
+                    <Tag type={aiRuntime?.status === 'invalid' ? 'red' : 'green'} size="sm">
+                      {aiRuntime?.status === 'invalid'
+                        ? t('invalidConfiguration', 'Invalid configuration')
+                        : t('localFirst', 'Local first')}
+                    </Tag>
+                    <Button
+                      kind="tertiary"
+                      size="sm"
+                      renderIcon={Renew}
+                      onClick={refreshAiRuntimeConfig}
+                      disabled={aiRuntimeLoading || aiRuntimeSaving}
+                    >
+                      {aiRuntimeLoading ? t('checking', 'Checking...') : t('refresh', 'Refresh')}
+                    </Button>
+                  </div>
                 </div>
-                <p className={styles.description}>
-                  {t(
-                    'translationFlowDescription',
-                    'Open a local LiveKit room, then run the doctor-patient translation and OpenMRS draft flow from this workspace.',
-                  )}
-                </p>
+                {aiRuntimeError && <p className={styles.adminError}>{aiRuntimeError}</p>}
+                {Boolean(aiRuntime?.warnings?.length) && (
+                  <ul className={styles.errorList}>
+                    {aiRuntime?.warnings?.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                )}
+                {aiRuntimeDraft ? (
+                  <div className={styles.runtimeForm}>
+                    <label>
+                      <span>{t('sttProvider', 'STT provider')}</span>
+                      <select
+                        value={aiRuntimeDraft.sttProvider}
+                        onChange={(event) =>
+                          updateAiRuntimeDraft(
+                            'sttProvider',
+                            event.currentTarget.value as AiRuntimeConfig['sttProvider'],
+                          )
+                        }
+                      >
+                        {aiRuntimeProviderOptions(aiRuntime, 'stt').map((provider) => (
+                          <option key={provider.id} value={provider.id}>
+                            {providerOptionLabel(provider, t)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>{t('deepgramModel', 'Deepgram model')}</span>
+                      <input
+                        value={aiRuntimeDraft.deepgramModel}
+                        onChange={(event) => updateAiRuntimeDraft('deepgramModel', event.currentTarget.value)}
+                        disabled={aiRuntimeDraft.sttProvider !== 'deepgram'}
+                      />
+                    </label>
+                    <label className={styles.checkboxRow}>
+                      <input
+                        type="checkbox"
+                        checked={aiRuntimeDraft.deepgramEnableDiarization}
+                        onChange={(event) =>
+                          updateAiRuntimeDraft('deepgramEnableDiarization', event.currentTarget.checked)
+                        }
+                        disabled={aiRuntimeDraft.sttProvider !== 'deepgram'}
+                      />
+                      <span>{t('deepgramDiarization', 'Deepgram diarization')}</span>
+                    </label>
+                    <label className={styles.checkboxRow}>
+                      <input
+                        type="checkbox"
+                        checked={aiRuntimeDraft.deepgramUseFlux}
+                        onChange={(event) =>
+                          updateAiRuntimeDraft('deepgramUseFlux', event.currentTarget.checked)
+                        }
+                        disabled={aiRuntimeDraft.sttProvider !== 'deepgram'}
+                      />
+                      <span>{t('deepgramFlux', 'Deepgram Flux')}</span>
+                    </label>
+                    <label>
+                      <span>{t('ttsProvider', 'TTS provider')}</span>
+                      <select
+                        value={aiRuntimeDraft.ttsProvider}
+                        onChange={(event) =>
+                          updateAiRuntimeDraft(
+                            'ttsProvider',
+                            event.currentTarget.value as AiRuntimeConfig['ttsProvider'],
+                          )
+                        }
+                      >
+                        {aiRuntimeProviderOptions(aiRuntime, 'tts').map((provider) => (
+                          <option key={provider.id} value={provider.id}>
+                            {providerOptionLabel(provider, t)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>{t('inworldModel', 'Inworld model')}</span>
+                      <input
+                        value={aiRuntimeDraft.inworldModel}
+                        onChange={(event) => updateAiRuntimeDraft('inworldModel', event.currentTarget.value)}
+                        disabled={aiRuntimeDraft.ttsProvider !== 'inworld'}
+                      />
+                    </label>
+                    <div className={styles.runtimeActions}>
+                      <Tag type={aiRuntimeDraft.sttProvider === 'deepgram' ? 'purple' : 'cyan'} size="sm">
+                        {aiRuntimeDraft.sttProvider === 'deepgram'
+                          ? t('cloudStt', 'Cloud STT')
+                          : t('localStt', 'Local STT')}
+                      </Tag>
+                      <Tag type={aiRuntimeDraft.ttsProvider === 'inworld' ? 'purple' : 'green'} size="sm">
+                        {aiRuntimeDraft.ttsProvider === 'inworld'
+                          ? t('cloudTts', 'Cloud TTS')
+                          : t('localTts', 'Local TTS')}
+                      </Tag>
+                      <Button
+                        kind="primary"
+                        size="sm"
+                        onClick={persistAiRuntimeConfig}
+                        disabled={aiRuntimeSaving || aiRuntimeLoading}
+                      >
+                        {aiRuntimeSaving ? t('saving', 'Saving...') : t('saveProviderConfig', 'Save')}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className={styles.description}>
+                    {aiRuntimeLoading
+                      ? t('checking', 'Checking...')
+                      : t('aiRuntimeConfigUnavailable', 'AI runtime configuration unavailable.')}
+                  </p>
+                )}
                 <div className={styles.pipelinePreview}>
                   <Tag type="cyan" size="sm">
                     {t('localAi', 'Local AI')}
@@ -432,6 +642,46 @@ function formatAuditTime(createdAt?: number): string {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+function aiRuntimeProviderOptions(
+  response: AiRuntimeConfigResponse | null,
+  kind: 'stt' | 'tts',
+): AiRuntimeProviderOption[] {
+  const configured = response?.providers?.[kind];
+  if (configured?.length) {
+    return configured;
+  }
+  return kind === 'stt'
+    ? [
+        {
+          id: 'whisper',
+          label: 'Local Whisper',
+          locality: 'local',
+          configured: true,
+          supportsDiarization: false,
+        },
+        {
+          id: 'deepgram',
+          label: 'Deepgram Nova',
+          locality: 'cloud',
+          configured: false,
+          supportsDiarization: true,
+        },
+      ]
+    : [
+        { id: 'piper', label: 'Local Piper', locality: 'local', configured: true },
+        { id: 'inworld', label: 'Inworld TTS', locality: 'cloud', configured: false },
+      ];
+}
+
+function providerOptionLabel(
+  provider: AiRuntimeProviderOption,
+  t: ReturnType<typeof useTranslation>['t'],
+): string {
+  const locality = provider.locality === 'cloud' ? t('cloud', 'Cloud') : t('local', 'Local');
+  const configured = provider.configured ? '' : ` (${t('notConfigured', 'Not configured')})`;
+  return `${provider.label} - ${locality}${configured}`;
 }
 
 export default LivekitConfigurationPage;
