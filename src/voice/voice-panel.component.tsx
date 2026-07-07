@@ -800,10 +800,11 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     },
     {
       step: 'doctorTranslation',
-      title: t('translateToLanguage', 'Translate to {{language}}', { language: patientLanguageLabel }),
+      title: t('translateForPatient', 'Translate for patient'),
       detail: t(
         'translateForPatientDetail',
-        'Redact identifiers and translate clinical meaning to the patient language.',
+        'Redact identifiers and translate clinical meaning to {{language}} for the patient.',
+        { language: patientLanguageLabel },
       ),
     },
     {
@@ -818,8 +819,12 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     },
     {
       step: 'patientTranslation',
-      title: t('translateToLanguage', 'Translate to {{language}}', { language: doctorLanguageLabel }),
-      detail: t('translateForDoctorDetail', 'Translate the patient response back to the clinician language.'),
+      title: t('translateForDoctor', 'Translate for doctor'),
+      detail: t(
+        'translateForDoctorDetail',
+        'Translate the patient response back to {{language}} for the clinician.',
+        { language: doctorLanguageLabel },
+      ),
     },
     {
       step: 'openmrsDraft',
