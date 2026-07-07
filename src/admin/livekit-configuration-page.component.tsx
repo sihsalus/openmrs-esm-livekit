@@ -122,13 +122,12 @@ const LivekitConfigurationPage: React.FC = () => {
         >
           <Tab>{t('overview', 'Overview')}</Tab>
           <Tab>{t('serviceHealth', 'Service health')}</Tab>
-          <Tab>{t('draftWrite', 'Draft write')}</Tab>
-          <Tab>{t('draftAudit', 'Draft audit')}</Tab>
+          <Tab>{t('drafts', 'Drafts')}</Tab>
         </TabList>
         <TabPanels>
           <TabPanel className={styles.tabPanel}>
             <div className={styles.grid}>
-              <Tile className={styles.configTile}>
+              <Tile className={`${styles.configTile} ${styles.wideTile}`}>
                 <div className={styles.tileHeader}>
                   <h2>{t('localAi', 'Local AI')}</h2>
                 </div>
@@ -163,7 +162,7 @@ const LivekitConfigurationPage: React.FC = () => {
                 </div>
               </Tile>
 
-              <Tile className={styles.configTile}>
+              <Tile className={`${styles.configTile} ${styles.wideTile}`}>
                 <div className={styles.tileHeader}>
                   <h2>{t('livekitRoom', 'LiveKit room')}</h2>
                 </div>
@@ -265,11 +264,7 @@ const LivekitConfigurationPage: React.FC = () => {
                   </ul>
                 )}
               </Tile>
-            </div>
-          </TabPanel>
 
-          <TabPanel className={styles.tabPanel}>
-            <div className={styles.grid}>
               <Tile className={`${styles.configTile} ${styles.wideTile}`}>
                 <div className={styles.tileHeader}>
                   <div>

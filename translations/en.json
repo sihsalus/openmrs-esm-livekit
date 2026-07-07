@@ -57,6 +57,7 @@
   "draftAuditUnavailable": "Draft audit unavailable.",
   "draftConfigLoadFailed": "Could not load draft write configuration.",
   "draftObsConcept": "Draft obs concept",
+  "drafts": "Drafts",
   "draftWrite": "Draft write",
   "draftReviewQueueOnlyDetail": "OpenMRS encounter write is not configured or is still checking; this draft can stay in the review queue.",
   "draftWriteHealthDetail": "Encounter write requires configured encounter type, location, draft obs concept, and an active visit. Until then, drafts stay in review queue.",

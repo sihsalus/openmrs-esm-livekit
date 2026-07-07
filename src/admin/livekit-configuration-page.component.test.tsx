@@ -122,7 +122,9 @@ describe('LivekitConfigurationPage', () => {
     expect(screen.getAllByText('Active via agent')).toHaveLength(3);
     expect(screen.getByText('Review queue')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Draft write' }));
+    expect(screen.queryByRole('tab', { name: 'Draft audit' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Drafts' }));
     expect(
       await screen.findByRole('heading', { name: 'OpenMRS draft write configuration' }),
     ).toBeInTheDocument();
@@ -131,7 +133,6 @@ describe('LivekitConfigurationPage', () => {
     expect(screen.getByText('Outpatient Clinic')).toBeInTheDocument();
     expect(screen.getByText('Text of encounter note')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Draft audit' }));
     expect(await screen.findByRole('heading', { name: 'Draft audit' })).toBeInTheDocument();
     expect(screen.getByText('draft_write_rejected')).toBeInTheDocument();
     expect(screen.getByText('visit_required')).toBeInTheDocument();
@@ -210,7 +211,7 @@ describe('LivekitConfigurationPage', () => {
 
     render(<LivekitConfigurationPage />);
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Draft write' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Drafts' }));
     expect(await screen.findByText('Visit Note')).toBeInTheDocument();
     expect(screen.getByText('Outpatient Clinic')).toBeInTheDocument();
     expect(screen.getByText('Text of encounter note')).toBeInTheDocument();
@@ -219,8 +220,6 @@ describe('LivekitConfigurationPage', () => {
         'Draft audit request failed: 500 Internal Server Error - Audit store unavailable',
       ),
     ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Draft audit' }));
     expect(screen.getByText('Draft audit unavailable.')).toBeInTheDocument();
   });
 });
