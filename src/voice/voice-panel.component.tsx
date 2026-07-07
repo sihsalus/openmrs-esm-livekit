@@ -514,6 +514,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
         patientLanguage={patientLanguage}
         agentVoiceLanguage={agentVoiceLanguage}
         captureRole={captureRole}
+        autoDiarizationEnabled={autoDiarizationEnabled}
         demoFlowEnabled={demoFlowEnabled}
       />
     </LiveKitRoom>
@@ -536,6 +537,7 @@ interface ActiveSessionProps {
   patientLanguage: LanguageCode;
   agentVoiceLanguage: LanguageCode;
   captureRole: CaptureRole;
+  autoDiarizationEnabled: boolean;
   demoFlowEnabled: boolean;
 }
 
@@ -551,6 +553,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   patientLanguage,
   agentVoiceLanguage,
   captureRole,
+  autoDiarizationEnabled,
   demoFlowEnabled,
 }) => {
   const { t } = useTranslation();
@@ -583,6 +586,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     transcripts: agentTranscripts,
     agentDraft,
     agentStatus,
+    agentStatusStep,
     agentError,
     agentParticipantConnected,
     clearTranscripts,
@@ -684,6 +688,21 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     setDraftSaveMessage(null);
     setDraftSaveError(null);
   }, [agentDraft, demoRunning]);
+
+  useEffect(() => {
+    if (demoRunning) {
+      return;
+    }
+
+    setStepStatus(
+      inferRealFlowStepStatus({
+        transcripts: agentTranscripts,
+        hasDraft: Boolean(agentDraft || draft),
+        agentStatusStep,
+        agentParticipantConnected,
+      }),
+    );
+  }, [agentDraft, agentParticipantConnected, agentStatusStep, agentTranscripts, demoRunning, draft]);
 
   const liveTranscriptText = useMemo(() => {
     if (agentTranscripts.length === 0) return '';
@@ -1084,8 +1103,10 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
                 role: captureRoleValueLabel,
               })}
             </Tag>
-            <Tag type="blue" size="sm">
-              {t('speakerAttributionModeValue', 'Source-role attribution')}
+            <Tag type={autoDiarizationEnabled ? 'purple' : 'blue'} size="sm">
+              {autoDiarizationEnabled
+                ? t('autoDiarization', 'Auto diarization')
+                : t('speakerAttributionModeValue', 'Source-role attribution')}
             </Tag>
             <Tag type="gray" size="sm">
               {t('fixedForRoom', 'Fixed for room')}
@@ -1404,6 +1425,64 @@ function languageLabel(language: LanguageCode, t: ReturnType<typeof useTranslati
 
 function captureRoleLabel(role: CaptureRole, t: ReturnType<typeof useTranslation>['t']) {
   return role === 'patient' ? t('patient', 'Patient') : t('doctor', 'Doctor');
+}
+
+function inferRealFlowStepStatus({
+  transcripts,
+  hasDraft,
+  agentStatusStep,
+  agentParticipantConnected,
+}: {
+  transcripts: AgentTranscript[];
+  hasDraft: boolean;
+  agentStatusStep: string;
+  agentParticipantConnected: boolean;
+}): Record<FlowStep, StepStatus> {
+  const next: Record<FlowStep, StepStatus> = { ...initialStepStatus };
+  const humanTurns = transcripts.filter((transcript) => transcript.role !== 'assistant');
+  const assistantTurns = transcripts.filter((transcript) => transcript.role === 'assistant');
+  const firstHuman = humanTurns[0];
+  const firstAssistantAfterHuman = firstHuman
+    ? assistantTurns.find((transcript) => transcript.timestamp >= firstHuman.timestamp)
+    : undefined;
+  const secondHumanAfterAssistant = firstAssistantAfterHuman
+    ? humanTurns.find((transcript) => transcript.timestamp > firstAssistantAfterHuman.timestamp)
+    : undefined;
+  const secondAssistantAfterHuman = secondHumanAfterAssistant
+    ? assistantTurns.find((transcript) => transcript.timestamp >= secondHumanAfterAssistant.timestamp)
+    : undefined;
+  const explicitPatientTurn = humanTurns.find((transcript) => transcript.role === 'patient');
+  const explicitDoctorTurn = humanTurns.find((transcript) => transcript.role === 'doctor');
+  const agentReady =
+    agentParticipantConnected ||
+    agentStatusStep === 'agent_connected' ||
+    agentStatusStep === 'agent_listening';
+
+  if (agentReady) {
+    next.doctorStt = 'running';
+  }
+  if (firstHuman || explicitDoctorTurn) {
+    next.doctorStt = 'done';
+    next.doctorTranslation = 'running';
+  }
+  if (firstAssistantAfterHuman) {
+    next.doctorTranslation = 'done';
+    next.patientTts = 'done';
+    next.patientStt = 'running';
+  }
+  if (secondHumanAfterAssistant || explicitPatientTurn) {
+    next.patientStt = 'done';
+    next.patientTranslation = 'running';
+  }
+  if (secondAssistantAfterHuman) {
+    next.patientTranslation = 'done';
+    next.openmrsDraft = 'running';
+  }
+  if (hasDraft) {
+    next.openmrsDraft = 'done';
+  }
+
+  return next;
 }
 
 function buildFlowSteps(

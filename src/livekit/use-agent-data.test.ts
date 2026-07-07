@@ -142,6 +142,7 @@ describe('parseAgentDataPayload', () => {
     expect(parseAgentDataPayload(encode({ type: 'status', payload: { step: 'Listening' } }))).toEqual({
       type: 'status',
       status: 'Listening',
+      step: 'Listening',
     });
   });
 
@@ -159,6 +160,7 @@ describe('parseAgentDataPayload', () => {
     ).toEqual({
       type: 'status',
       status: 'Agent is listening for clinical conversation.',
+      step: 'agent_listening',
     });
   });
 
