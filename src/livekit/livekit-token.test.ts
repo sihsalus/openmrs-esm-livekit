@@ -5,6 +5,7 @@ import {
   buildOpenmrsDraftWritePayload,
   buildQueuedOpenmrsDraftPayload,
   buildRoomName,
+  compileEncounterDraft,
   fetchAiRuntimeConfig,
   fetchLivekitToken,
   fetchOpenmrsDraftAudit,
@@ -378,6 +379,45 @@ describe('LiveKit token endpoint transport', () => {
 
     const [, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
     expect(init.credentials).toBe('include');
+  });
+
+  it('compiles an encounter draft from the helper gateway path', async () => {
+    stubBrowserLocation('https://openmrs.example/spa/home');
+    const responsePayload = {
+      status: 'ok',
+      engine: 'heuristic',
+      redactedTranscript: 'Doctor: [PATIENT] has cough.',
+      draft: {
+        chiefComplaint: 'Cough',
+        symptoms: ['cough'],
+        medicationsMentioned: [],
+        allergiesMentioned: [],
+        assessmentNotes: 'Review required.',
+        patientInstructions: 'Return if worse.',
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(responsePayload, 200, 'OK'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      compileEncounterDraft('/openmrs/livekit/token', {
+        transcript: 'Doctor: Joshua has cough.',
+        patientName: 'Joshua Johnson',
+      }),
+    ).resolves.toEqual(responsePayload);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://openmrs.example/openmrs/livekit/compile-encounter',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcript: 'Doctor: Joshua has cough.',
+          patientName: 'Joshua Johnson',
+        }),
+      }),
+    );
   });
 
   it('fetches OpenMRS draft write configuration from the helper gateway path', async () => {

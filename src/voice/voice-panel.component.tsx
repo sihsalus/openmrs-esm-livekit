@@ -27,6 +27,7 @@ import {
   aiRuntimeUsesAutoDiarization,
   buildOpenmrsDraftWritePayload,
   buildQueuedOpenmrsDraftPayload,
+  compileEncounterDraft,
   fetchAiRuntimeConfig,
   fetchLivekitToken,
   type AiRuntimeConfigResponse,
@@ -175,6 +176,15 @@ const initialStepStatus: Record<FlowStep, StepStatus> = {
   patientStt: 'idle',
   patientTranslation: 'idle',
   openmrsDraft: 'idle',
+};
+
+const completedStepStatus: Record<FlowStep, StepStatus> = {
+  doctorStt: 'done',
+  doctorTranslation: 'done',
+  patientTts: 'done',
+  patientStt: 'done',
+  patientTranslation: 'done',
+  openmrsDraft: 'done',
 };
 
 const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChange }) => {
@@ -328,12 +338,6 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
     t,
     tokenEndpoint,
   ]);
-
-  const disconnect = useCallback(() => {
-    setToken(null);
-    setRoomName('');
-    onClose?.();
-  }, [onClose]);
 
   const resetSession = useCallback(() => {
     setToken(null);
@@ -511,7 +515,6 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
         visitUuid={activeVisitUuid}
         patientName={patient?.name?.[0]?.text ?? ''}
         roomName={roomName}
-        onEnd={disconnect}
         livekitUrl={livekitServerUrl}
         tokenEndpoint={tokenEndpoint}
         doctorLanguage={doctorLanguage}
@@ -534,7 +537,6 @@ interface ActiveSessionProps {
   visitUuid: string;
   patientName: string;
   roomName: string;
-  onEnd: () => void;
   livekitUrl: string;
   tokenEndpoint: string;
   doctorLanguage: LanguageCode;
@@ -550,7 +552,6 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   visitUuid,
   patientName,
   roomName,
-  onEnd,
   livekitUrl,
   tokenEndpoint,
   doctorLanguage,
@@ -575,6 +576,8 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const [draftOpenmrsSaved, setDraftOpenmrsSaved] = useState(false);
   const [draftEncounterUuid, setDraftEncounterUuid] = useState<string | null>(null);
   const [draftSavingAction, setDraftSavingAction] = useState<DraftSaveAction | null>(null);
+  const [draftFinalizing, setDraftFinalizing] = useState(false);
+  const [consultationFinalized, setConsultationFinalized] = useState(false);
   const [draftSaveMessage, setDraftSaveMessage] = useState<string | null>(null);
   const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [health, setHealth] = useState<ServiceHealth>(initialHealth);
@@ -585,6 +588,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const lastAppliedAgentDraft = useRef<EncounterDraft | null>(null);
   const initialMicrophoneEnableAttempted = useRef(false);
   const draftSaveInFlight = useRef(false);
+  const draftFinalizeInFlight = useRef(false);
   const micToggleInFlight = useRef(false);
   const {
     transcripts: agentTranscripts,
@@ -792,6 +796,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     setDraftQueued(false);
     setDraftOpenmrsSaved(false);
     setDraftEncounterUuid(null);
+    setConsultationFinalized(false);
     setDraftSaveMessage(null);
     setDraftSaveError(null);
     setStepStatus(initialStepStatus);
@@ -817,13 +822,90 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
     setDraftOpenmrsSaved(false);
     setDraftEncounterUuid(null);
     setDraftSavingAction(null);
+    setDraftFinalizing(false);
+    setConsultationFinalized(false);
     setDraftSaveMessage(null);
     setDraftSaveError(null);
     draftSaveInFlight.current = false;
+    draftFinalizeInFlight.current = false;
     setDemoRunning(false);
     lastAppliedAgentDraft.current = null;
     clearTranscripts();
   }, [clearTranscripts]);
+
+  const finishConsultation = useCallback(async () => {
+    if (draftFinalizeInFlight.current) {
+      return;
+    }
+
+    setDraftSaveError(null);
+    setDraftSaveMessage(null);
+
+    try {
+      draftFinalizeInFlight.current = true;
+      setDraftFinalizing(true);
+
+      if (localParticipant && !muted) {
+        try {
+          await localParticipant.setMicrophoneEnabled(false);
+          setMuted(true);
+        } catch {
+          setMicError(t('microphoneMuteFailed', 'Unable to mute the microphone automatically.'));
+        }
+      }
+
+      if (draft) {
+        setConsultationFinalized(true);
+        setStepStatus({ ...completedStepStatus });
+        setDraftSaveMessage(
+          t('draftReadyForReview', 'Consultation finalized. Review the draft before saving.'),
+        );
+        return;
+      }
+
+      const transcript = (liveTranscriptText || redactedTranscript).trim();
+      if (!transcript) {
+        setDraftSaveError(
+          t(
+            'noTranscriptForDraft',
+            'No transcript is available yet. Unmute the microphone, speak once, then finish the consultation again.',
+          ),
+        );
+        return;
+      }
+
+      setStepStatus((cur) => ({ ...cur, openmrsDraft: 'running' }));
+      const result = await compileEncounterDraft(tokenEndpoint, {
+        transcript,
+        patientName,
+      });
+
+      if (result.status !== 'ok' || !result.draft) {
+        throw new Error(
+          result.error || result.message || t('failedToGenerateDraft', 'Failed to generate draft'),
+        );
+      }
+
+      setRedactedTranscript(result.redactedTranscript || transcript);
+      setDraft((currentDraft) => mergeEncounterDraft(currentDraft, result.draft as EncounterDraft));
+      setDraftQueued(false);
+      setDraftOpenmrsSaved(false);
+      setDraftEncounterUuid(null);
+      setConsultationFinalized(true);
+      setDraftSaveMessage(
+        t('draftGeneratedForReview', 'Draft generated. Review it before saving to OpenMRS.'),
+      );
+      setStepStatus({ ...completedStepStatus });
+    } catch (err) {
+      setStepStatus((cur) => ({ ...cur, openmrsDraft: draft ? 'done' : 'idle' }));
+      setDraftSaveError(
+        err instanceof Error ? err.message : t('failedToGenerateDraft', 'Failed to generate draft'),
+      );
+    } finally {
+      draftFinalizeInFlight.current = false;
+      setDraftFinalizing(false);
+    }
+  }, [draft, liveTranscriptText, localParticipant, muted, patientName, redactedTranscript, t, tokenEndpoint]);
 
   const saveDraft = useCallback(
     async (action: DraftSaveAction) => {
@@ -934,11 +1016,14 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       ? t('unmute', 'Unmute')
       : t('mute', 'Mute')
     : t('microphoneUnavailableShort', 'Microphone unavailable');
-  const displayedAgentStatus =
-    agentStatus ||
-    (agentParticipantConnected
-      ? t('agentConnectedWaiting', 'Agent connected. Waiting for speech or draft data.')
-      : '');
+  const displayedAgentStatus = draftFinalizing
+    ? t('generatingDraftFromTranscript', 'Generating draft from transcript...')
+    : consultationFinalized
+      ? t('consultationFinalizedReady', 'Consultation finalized. Review the draft below.')
+      : agentStatus ||
+        (agentParticipantConnected
+          ? t('agentConnectedWaiting', 'Agent connected. Waiting for speech or draft data.')
+          : '');
 
   const flowSteps = useMemo(
     () => buildFlowSteps(t, doctorLanguageLabel, patientLanguageLabel),
@@ -1004,19 +1089,24 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
             size="md"
             renderIcon={Play}
             onClick={runDemoConversation}
-            disabled={demoRunning}
+            disabled={demoRunning || draftFinalizing}
           >
             {demoRunning ? t('demoRunning', 'Running demo...') : t('runDemo', 'Run demo conversation')}
           </Button>
         )}
         <Button
           kind="danger--ghost"
-          size="lg"
-          hasIconOnly
+          size="md"
           renderIcon={StopFilled}
-          iconDescription={t('endConsultation', 'End consultation')}
-          onClick={onEnd}
-        />
+          onClick={finishConsultation}
+          disabled={draftFinalizing || demoRunning || draftSaving}
+        >
+          {draftFinalizing
+            ? t('generatingDraft', 'Generating draft...')
+            : draft
+              ? t('finishConsultation', 'Finish consultation')
+              : t('finishAndGenerateDraft', 'Finish & generate draft')}
+        </Button>
       </div>
 
       {showAgentFallback && (
@@ -1062,7 +1152,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
               </button>
             </Tooltip>
           </div>
-          <Button kind="ghost" size="sm" onClick={resetFlow} disabled={demoRunning}>
+          <Button kind="ghost" size="sm" onClick={resetFlow} disabled={demoRunning || draftFinalizing}>
             {t('resetFlow', 'Reset flow')}
           </Button>
         </div>
@@ -1491,7 +1581,7 @@ function inferRealFlowStepStatus({
     next.openmrsDraft = 'running';
   }
   if (hasDraft) {
-    next.openmrsDraft = 'done';
+    return { ...completedStepStatus };
   }
 
   return next;
