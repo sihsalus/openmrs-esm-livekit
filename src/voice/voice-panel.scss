@@ -81,6 +81,18 @@
   }
 }
 
+.captureRoleControls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: layout.$spacing-03;
+  justify-content: flex-end;
+
+  @media (max-width: 42rem) {
+    justify-content: flex-start;
+  }
+}
+
 .flowPreviewCard {
   display: grid;
   gap: layout.$spacing-04;

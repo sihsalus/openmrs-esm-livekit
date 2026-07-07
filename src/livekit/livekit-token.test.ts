@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  aiRuntimeUsesAutoDiarization,
   type AiRuntimeConfig,
   buildOpenmrsDraftWritePayload,
   buildQueuedOpenmrsDraftPayload,
@@ -219,6 +220,22 @@ describe('LiveKit token endpoint transport', () => {
         body: JSON.stringify(runtimeConfig),
       }),
     );
+  });
+
+  it('detects when runtime STT should use automatic diarization', () => {
+    const runtimeConfig: AiRuntimeConfig = {
+      localAiFirst: true,
+      sttProvider: 'deepgram',
+      ttsProvider: 'piper',
+      deepgramModel: 'nova-3',
+      deepgramEnableDiarization: true,
+      deepgramUseFlux: false,
+      inworldModel: 'inworld-tts-2',
+    };
+
+    expect(aiRuntimeUsesAutoDiarization(runtimeConfig)).toBe(true);
+    expect(aiRuntimeUsesAutoDiarization({ ...runtimeConfig, deepgramUseFlux: true })).toBe(false);
+    expect(aiRuntimeUsesAutoDiarization({ ...runtimeConfig, sttProvider: 'whisper' })).toBe(false);
   });
 
   it('can request a patient capture token for single-browser role simulation', async () => {
