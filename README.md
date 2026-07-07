@@ -212,11 +212,12 @@ languages fall back to the normalized clinician language. If `LIVEKIT_HTTP_URL`
 is configured, the helper performs a best-effort LiveKit room metadata sync
 before returning the browser token.
 
-The browser microphone is requested as `captureRole=doctor`. If the STT provider
-emits a `speaker_id`, the agent can include `speakerId`, attribution mode, and
-attribution source in transcript payloads. If no speaker ID is available, the
-transcript falls back to the configured default human role instead of claiming
-automatic doctor/patient diarization.
+The browser microphone defaults to `captureRole=doctor`; the preflight screen
+can switch it to `captureRole=patient` for single-browser patient-side
+simulation. If the STT provider emits a `speaker_id`, the agent can include
+`speakerId`, attribution mode, and attribution source in transcript payloads. If
+no speaker ID is available, the transcript falls back to the configured capture
+role instead of claiming automatic doctor/patient diarization.
 
 ## Helper Service Contracts
 

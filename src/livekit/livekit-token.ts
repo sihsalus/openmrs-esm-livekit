@@ -6,8 +6,11 @@ export interface LivekitRoomLanguageConfig {
   agentVoiceLanguage: ClinicalLanguageCode;
 }
 
+export type LivekitCaptureRole = 'doctor' | 'patient';
+
 export interface LivekitRoomContext {
   visitUuid?: string;
+  captureRole?: LivekitCaptureRole;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -20,6 +23,7 @@ export async function fetchLivekitToken(
   roomContext: LivekitRoomContext = {},
 ): Promise<{ token: string; roomName: string }> {
   const roomName = buildRoomName(patientUuid, roomPrefix);
+  const captureRole = roomContext.captureRole ?? 'doctor';
   const res = await fetch(tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -30,8 +34,8 @@ export async function fetchLivekitToken(
       roomPrefix,
       ...(roomContext.visitUuid ? { visitUuid: roomContext.visitUuid } : {}),
       ...languageConfig,
-      captureRole: 'doctor',
-      defaultHumanRole: 'doctor',
+      captureRole,
+      defaultHumanRole: captureRole,
       speakerAttributionMode: 'source-role',
     }),
   });

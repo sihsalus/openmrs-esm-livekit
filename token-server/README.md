@@ -185,7 +185,8 @@ The helper also signs participant metadata with:
 }
 ```
 
-The current OpenMRS browser client uses `captureRole=doctor`. Real role
+The OpenMRS browser client defaults to `captureRole=doctor` and can request
+`captureRole=patient` for single-browser patient-side simulation. Real role
 attribution requires an STT `speaker_id`, a configured `speakerRoleMap`, or a
 separate capture flow that supplies patient-role metadata. Without that source,
 the agent publishes transcript payloads with a default-role attribution marker
