@@ -58,6 +58,7 @@
   "draftAuditUnavailable": "Auditoría de borradores no disponible.",
   "draftConfigLoadFailed": "No se pudo cargar la configuración de escritura de borradores.",
   "draftObsConcept": "Concepto obs de borrador",
+  "drafts": "Borradores",
   "draftWrite": "Escritura de borrador",
   "draftReviewQueueOnlyDetail": "La escritura de encuentros en OpenMRS no está configurada o aún se está verificando; este borrador puede quedar en la cola de revisión.",
   "draftWriteHealthDetail": "La escritura del encuentro requiere tipo de encuentro, ubicación, concepto obs de borrador y una visita activa configurados. Hasta entonces, los borradores quedan en cola de revisión.",
