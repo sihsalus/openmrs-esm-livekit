@@ -214,7 +214,7 @@ export function resolveLivekitServerUrl(configuredUrl?: string): string {
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.hostname}:7880`;
+  return `${protocol}//${window.location.host}/livekit-sfu`;
 }
 
 export function resolveTokenEndpoint(configuredEndpoint?: string): string {

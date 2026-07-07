@@ -36,14 +36,15 @@
 }
 
 .page {
+  background: colors.$white-0;
   display: grid;
-  gap: layout.$spacing-06;
-  padding: layout.$spacing-06;
+  gap: 0;
 }
 
 .pageHeader {
   display: grid;
   gap: layout.$spacing-02;
+  padding: layout.$spacing-05;
 
   p {
     color: var(--cds-text-secondary);
@@ -56,6 +57,16 @@
     font-weight: 400;
     margin: 0;
   }
+}
+
+.tabList {
+  padding: 0 layout.$spacing-05;
+}
+
+.tabPanel {
+  background: colors.$gray-10;
+  min-height: calc(100vh - 10rem);
+  padding: layout.$spacing-05;
 }
 
 .grid {
