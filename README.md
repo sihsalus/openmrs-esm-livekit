@@ -219,6 +219,12 @@ simulation. If the STT provider emits a `speaker_id`, the agent can include
 no speaker ID is available, the transcript falls back to the configured capture
 role instead of claiming automatic doctor/patient diarization.
 
+For real doctor/patient diarization, run the LiveKit agent with an STT provider
+that emits speaker IDs. The deploy stack supports Deepgram with
+`LIVEKIT_AGENT_STT_PROVIDER=deepgram`, `DEEPGRAM_API_KEY`, and
+`DEEPGRAM_ENABLE_DIARIZATION=true`. The default local Whisper CPU provider does
+not emit speaker IDs.
+
 ## Helper Service Contracts
 
 The helper is not the realtime conversational agent. It provides local contracts

@@ -96,6 +96,21 @@ WHISPER_MODEL_SIZE=base
 PIPER_MODEL_PATH_EN=/srv/piper/voices/en_US-lessac-medium.onnx
 ```
 
+Optional real diarization with a cloud STT provider:
+
+```bash
+LIVEKIT_AGENT_STT_PROVIDER=deepgram
+DEEPGRAM_API_KEY=<deepgram-api-key>
+DEEPGRAM_MODEL=nova-3
+DEEPGRAM_ENABLE_DIARIZATION=true
+```
+
+The local Whisper provider used by the CPU stack does not emit speaker IDs. With
+Deepgram diarization enabled, transcript events can include `speaker_id`; the
+agent maps the first speaker to the configured default capture role and a second
+speaker to the other clinical role. Use this only when the site accepts sending
+audio to that provider under the required privacy agreement.
+
 Production-like shared deployments should also set:
 
 ```bash

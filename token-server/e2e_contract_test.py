@@ -263,6 +263,13 @@ def request_json(
         return json.loads(response.read().decode("utf-8")), response
 
 
+def read_http_error_json(error: urllib.error.HTTPError) -> dict[str, Any]:
+    try:
+        return json.loads(error.read().decode("utf-8"))
+    finally:
+        error.close()
+
+
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
@@ -375,10 +382,17 @@ class TokenServerE2ETest(unittest.TestCase):
             cls.process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             cls.process.kill()
+            cls.process.wait(timeout=5)
+        if cls.process.stdout:
+            cls.process.stdout.close()
         cls.openmrs_server.shutdown()
+        cls.openmrs_server.server_close()
         cls.ollama_server.shutdown()
+        cls.ollama_server.server_close()
         cls.livekit_server.shutdown()
+        cls.livekit_server.server_close()
         cls.agent_server.shutdown()
+        cls.agent_server.server_close()
         cls.tempdir.cleanup()
 
     def test_health_reports_local_services_and_contracts(self):
@@ -425,7 +439,7 @@ class TokenServerE2ETest(unittest.TestCase):
             )
 
         self.assertEqual(context.exception.code, 401)
-        payload = json.loads(context.exception.read().decode("utf-8"))
+        payload = read_http_error_json(context.exception)
         self.assertEqual(payload["code"], "openmrs_session_required")
 
     def test_synthetic_consultation_requires_authenticated_openmrs_session_when_enabled(self):
@@ -438,7 +452,7 @@ class TokenServerE2ETest(unittest.TestCase):
             )
 
         self.assertEqual(context.exception.code, 401)
-        payload = json.loads(context.exception.read().decode("utf-8"))
+        payload = read_http_error_json(context.exception)
         self.assertEqual(payload["code"], "openmrs_session_required")
 
     def test_admin_draft_get_endpoints_require_authenticated_openmrs_session(self):
@@ -446,7 +460,7 @@ class TokenServerE2ETest(unittest.TestCase):
             request_json(self.base_url, "/openmrs/draft/config", authenticated=False)
 
         self.assertEqual(context.exception.code, 401)
-        payload = json.loads(context.exception.read().decode("utf-8"))
+        payload = read_http_error_json(context.exception)
         self.assertEqual(payload["code"], "openmrs_session_required")
 
     def test_openmrs_probe_treats_login_html_as_reachable(self):
@@ -455,6 +469,7 @@ class TokenServerE2ETest(unittest.TestCase):
             payload = local_ai._probe_http(f"{base_url}/openmrs/ws/rest/v1/session", expect_json=True)
         finally:
             server.shutdown()
+            server.server_close()
 
         self.assertEqual(payload["status"], "ok")
         self.assertFalse(payload["json"])
@@ -551,6 +566,7 @@ class TokenServerE2ETest(unittest.TestCase):
         self.assertEqual(room_metadata["patientLanguage"], "es")
         self.assertEqual(room_metadata["agentVoiceLanguage"], "en")
         self.assertEqual(room_metadata["languageMode"], "single-language")
+        self.assertEqual(room_metadata["defaultHumanRole"], "patient")
 
     def test_token_defaults_to_english_when_openmrs_locale_is_not_provided(self):
         FakeLiveKitHandler.room_requests = []
@@ -625,7 +641,7 @@ class TokenServerE2ETest(unittest.TestCase):
             request_json(self.base_url, "/compile-encounter", {"patientName": "Sofia Demo"})
 
         self.assertEqual(context.exception.code, 400)
-        payload = json.loads(context.exception.read().decode("utf-8"))
+        payload = read_http_error_json(context.exception)
         self.assertEqual(payload["status"], "error")
         self.assertIn("Missing transcript or text", payload["error"])
 
@@ -847,7 +863,7 @@ class TokenServerE2ETest(unittest.TestCase):
             urllib.request.urlopen(request, timeout=10)
 
         self.assertEqual(context.exception.code, 400)
-        payload = json.loads(context.exception.read().decode("utf-8"))
+        payload = read_http_error_json(context.exception)
         self.assertEqual(payload["status"], "error")
         self.assertIn("valid JSON", payload["error"])
 
