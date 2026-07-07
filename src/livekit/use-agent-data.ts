@@ -45,7 +45,7 @@ export interface AgentMessage {
 export type ParsedAgentData =
   | { type: 'transcript'; transcript: AgentTranscript }
   | { type: 'draft'; draft: AgentDraft }
-  | { type: 'status'; status: string }
+  | { type: 'status'; status: string; step?: string }
   | { type: 'error'; error: string }
   | null;
 
@@ -58,6 +58,7 @@ export function useAgentData() {
   const [transcripts, setTranscripts] = useState<AgentTranscript[]>([]);
   const [agentDraft, setAgentDraft] = useState<AgentDraft | null>(null);
   const [agentStatus, setAgentStatus] = useState<string>('');
+  const [agentStatusStep, setAgentStatusStep] = useState<string>('');
   const [agentError, setAgentError] = useState<string | null>(null);
   const [agentParticipantConnected, setAgentParticipantConnected] = useState(false);
   const mounted = useRef(true);
@@ -87,6 +88,7 @@ export function useAgentData() {
         }
         case 'status': {
           setAgentStatus(parsed.status);
+          setAgentStatusStep(parsed.step ?? '');
           break;
         }
         case 'error': {
@@ -134,6 +136,7 @@ export function useAgentData() {
     setTranscripts([]);
     setAgentDraft(null);
     setAgentStatus('');
+    setAgentStatusStep('');
     setAgentError(null);
   }, []);
 
@@ -141,6 +144,7 @@ export function useAgentData() {
     transcripts,
     agentDraft,
     agentStatus,
+    agentStatusStep,
     agentError,
     agentParticipantConnected,
     clearTranscripts,
@@ -210,8 +214,9 @@ export function parseAgentDataPayload(payload: Uint8Array, now: () => number = D
         return { type: 'draft', draft: msg.payload };
       }
       case 'status': {
-        const message = stringField(msg.payload, 'message') ?? stringField(msg.payload, 'step') ?? '';
-        return { type: 'status', status: message };
+        const step = stringField(msg.payload, 'step');
+        const message = stringField(msg.payload, 'message') ?? step ?? '';
+        return { type: 'status', status: message, step };
       }
       case 'error': {
         const message = stringField(msg.payload, 'message') ?? 'Agent error';
