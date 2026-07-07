@@ -192,6 +192,11 @@ separate capture flow that supplies patient-role metadata. Without that source,
 the agent publishes transcript payloads with a default-role attribution marker
 instead of claiming automatic diarization.
 
+The default local Whisper CPU provider does not emit speaker IDs. To test real
+diarization through the LiveKit agent, configure a provider that emits speaker
+IDs, for example `LIVEKIT_AGENT_STT_PROVIDER=deepgram` with
+`DEEPGRAM_API_KEY` and `DEEPGRAM_ENABLE_DIARIZATION=true`.
+
 If the LiveKit room already exists, the helper updates room metadata instead of
 failing the token request. If metadata sync fails, `/token` still returns the
 browser token and includes `roomMetadata.status: "error"` so the session can
