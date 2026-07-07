@@ -157,7 +157,7 @@ describe('LivekitConfigurationPage', () => {
     expect(screen.getByText('openmrs-voice-')).toBeInTheDocument();
     expect(await screen.findByLabelText('STT provider')).toBeInTheDocument();
     expect(screen.getByLabelText('TTS provider')).toBeInTheDocument();
-    expect(screen.getByText('Local first')).toBeInTheDocument();
+    expect(screen.getAllByText('Local first').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Service health' }));
     expect(await screen.findByRole('heading', { name: 'Privacy & service health' })).toBeInTheDocument();
@@ -284,5 +284,105 @@ describe('LivekitConfigurationPage', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('Draft audit unavailable.')).toBeInTheDocument();
+  });
+
+  it('shows cloud provider state and keeps Deepgram Flux mutually exclusive with diarization', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/ai/runtime-config')) {
+        const config =
+          init?.method === 'POST'
+            ? JSON.parse(String(init.body))
+            : {
+                localAiFirst: true,
+                sttProvider: 'deepgram',
+                ttsProvider: 'piper',
+                deepgramModel: 'nova-3',
+                deepgramEnableDiarization: true,
+                deepgramUseFlux: false,
+                inworldModel: 'inworld-tts-2',
+              };
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'ok',
+            config,
+            effectiveConfig: config,
+            providers: {
+              stt: [
+                { id: 'whisper', label: 'Local Whisper', locality: 'local', configured: true },
+                {
+                  id: 'deepgram',
+                  label: 'Deepgram Nova',
+                  locality: 'cloud',
+                  configured: true,
+                  supportsDiarization: true,
+                },
+              ],
+              tts: [
+                { id: 'piper', label: 'Local Piper', locality: 'local', configured: true },
+                { id: 'inworld', label: 'Inworld TTS', locality: 'cloud', configured: false },
+              ],
+            },
+            warnings: [],
+          }),
+        });
+      }
+
+      if (url.includes('/openmrs/draft/config')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: 'disabled', enabled: false, validationErrors: [] }),
+        });
+      }
+
+      if (url.includes('/openmrs/draft/audit')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: 'ok', events: [] }),
+        });
+      }
+
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          services: {
+            livekit: { status: 'ok' },
+            tokenServer: { status: 'ok' },
+            agent: { status: 'ok' },
+            openmrs: { status: 'ok' },
+            openmrsDraftWrite: { status: 'disabled' },
+            agentCapabilities: {
+              stt: { status: 'configured' },
+              tts: { status: 'configured' },
+              llm: { status: 'ok' },
+            },
+            tokenServerAuth: { status: 'enforced' },
+            productionReadiness: { status: 'ok' },
+            cors: { status: 'ok' },
+            localStorage: { status: 'private_files' },
+          },
+        }),
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    window.history.replaceState({}, '', '/openmrs/spa/livekit-configuration');
+
+    render(<LivekitConfigurationPage />);
+
+    expect((await screen.findAllByText('Cloud STT active')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Deepgram STT')).toBeInTheDocument();
+    expect(screen.getByText('STT speaker IDs')).toBeInTheDocument();
+
+    const fluxToggle = screen.getByLabelText('Deepgram Flux') as HTMLInputElement;
+    const diarizationToggle = screen.getByLabelText('Deepgram diarization') as HTMLInputElement;
+    expect(diarizationToggle).toBeChecked();
+    expect(fluxToggle).not.toBeChecked();
+
+    fireEvent.click(fluxToggle);
+
+    expect(fluxToggle).toBeChecked();
+    expect(diarizationToggle).not.toBeChecked();
+    expect(screen.getByText('Deepgram Flux STT')).toBeInTheDocument();
+    expect(screen.getByText('Source-role fallback')).toBeInTheDocument();
   });
 });

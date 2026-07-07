@@ -14,6 +14,7 @@ import json
 import os
 import re
 import stat
+import tempfile
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import error as urllib_error
@@ -532,17 +533,21 @@ def sanitize_ai_runtime_config(body: dict) -> dict:
         stt_provider = defaults["sttProvider"]
     if tts_provider not in SUPPORTED_TTS_PROVIDERS:
         tts_provider = defaults["ttsProvider"]
+    deepgram_enable_diarization = sanitize_bool(
+        body.get("deepgramEnableDiarization"),
+        defaults["deepgramEnableDiarization"],
+    )
+    deepgram_use_flux = sanitize_bool(body.get("deepgramUseFlux"), defaults["deepgramUseFlux"])
+    if deepgram_use_flux:
+        deepgram_enable_diarization = False
 
     return {
         "localAiFirst": True,
         "sttProvider": stt_provider,
         "ttsProvider": tts_provider,
         "deepgramModel": sanitize_model_name(body.get("deepgramModel"), defaults["deepgramModel"]),
-        "deepgramEnableDiarization": sanitize_bool(
-            body.get("deepgramEnableDiarization"),
-            defaults["deepgramEnableDiarization"],
-        ),
-        "deepgramUseFlux": sanitize_bool(body.get("deepgramUseFlux"), defaults["deepgramUseFlux"]),
+        "deepgramEnableDiarization": deepgram_enable_diarization,
+        "deepgramUseFlux": deepgram_use_flux,
         "inworldModel": sanitize_model_name(body.get("inworldModel"), defaults["inworldModel"]),
     }
 
@@ -580,10 +585,27 @@ def save_ai_runtime_config(body: dict) -> dict:
     directory = os.path.dirname(AI_RUNTIME_CONFIG_PATH)
     if directory:
         os.makedirs(directory, exist_ok=True)
-    with open(AI_RUNTIME_CONFIG_PATH, "w", encoding="utf-8") as handle:
-        json.dump(config, handle, separators=(",", ":"))
-        handle.write("\n")
-    os.chmod(AI_RUNTIME_CONFIG_PATH, stat.S_IRUSR | stat.S_IWUSR)
+    target_dir = directory or "."
+    fd, temp_path = tempfile.mkstemp(
+        prefix=f".{os.path.basename(AI_RUNTIME_CONFIG_PATH)}.",
+        suffix=".tmp",
+        dir=target_dir,
+        text=True,
+    )
+    try:
+        os.fchmod(fd, stat.S_IRUSR | stat.S_IWUSR)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(config, handle, separators=(",", ":"))
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, AI_RUNTIME_CONFIG_PATH)
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
     return ai_runtime_config_response(config)
 
 
@@ -648,7 +670,11 @@ def agent_provider_overrides_from_config(config: dict) -> dict:
 
 
 def speaker_attribution_mode_for_config(config: dict) -> str:
-    if config.get("sttProvider") == "deepgram" and config.get("deepgramEnableDiarization") is True:
+    if (
+        config.get("sttProvider") == "deepgram"
+        and config.get("deepgramEnableDiarization") is True
+        and config.get("deepgramUseFlux") is not True
+    ):
         return "source-role+stt-speaker-id"
     return "source-role"
 
