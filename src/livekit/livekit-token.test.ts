@@ -171,6 +171,33 @@ describe('LiveKit token endpoint transport', () => {
     });
   });
 
+  it('can request a patient capture token for single-browser role simulation', async () => {
+    stubBrowserLocation('https://openmrs.example/spa/home');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: 'signed-token', roomName: 'openmrs-voice-patient-123' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchLivekitToken(
+      'patient-123',
+      'https://openmrs.example/livekit/token',
+      'openmrs-voice-',
+      {
+        doctorLanguage: 'en',
+        patientLanguage: 'es',
+        agentVoiceLanguage: 'es',
+      },
+      { visitUuid: 'visit-123', captureRole: 'patient' },
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      captureRole: 'patient',
+      defaultHumanRole: 'patient',
+    });
+  });
+
   it('includes JSON error details from token requests', async () => {
     stubBrowserLocation('https://openmrs.example/spa/home');
     vi.stubGlobal(

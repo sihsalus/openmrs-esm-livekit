@@ -27,6 +27,7 @@ import {
   buildOpenmrsDraftWritePayload,
   buildQueuedOpenmrsDraftPayload,
   fetchLivekitToken,
+  type LivekitCaptureRole,
   saveOpenmrsDraft,
 } from '../livekit/livekit-token';
 import { resolveLivekitOperationalConfig } from '../livekit/livekit-config';
@@ -66,6 +67,7 @@ export interface VoicePanelPreflightActions {
 }
 
 type LanguageCode = ClinicalLanguageCode;
+type CaptureRole = LivekitCaptureRole;
 type DraftSaveAction = 'queue' | 'openmrs';
 type FlowStep =
   | 'doctorStt'
@@ -191,6 +193,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   const [doctorLanguage, setDoctorLanguage] = useState<LanguageCode>(defaultLanguages.doctorLanguage);
   const [patientLanguage, setPatientLanguage] = useState<LanguageCode>(defaultLanguages.patientLanguage);
   const [agentVoiceLanguage, setAgentVoiceLanguage] = useState<LanguageCode>(defaultLanguages.doctorLanguage);
+  const [captureRole, setCaptureRole] = useState<CaptureRole>('doctor');
   const activeVisitUuid = activeVisit?.uuid ?? '';
   const shouldWaitForVisit = Boolean(patientUuid) && activeVisitLoading;
   const activeVisitRequiredMessage = t(
@@ -249,7 +252,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
           patientLanguage,
           agentVoiceLanguage,
         },
-        { visitUuid: activeVisitUuid },
+        { visitUuid: activeVisitUuid, captureRole },
       );
       setToken(result.token);
       setRoomName(result.roomName);
@@ -269,6 +272,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
     activeVisitRequiredMessage,
     activeVisitUuid,
     agentVoiceLanguage,
+    captureRole,
     doctorLanguage,
     patientLanguage,
     patientUuid,
@@ -349,6 +353,28 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
           </div>
         </Tile>
 
+        <Tile className={styles.captureRoleCard}>
+          <div className={styles.captureRoleHeader}>
+            <span>{t('microphoneRole', 'Microphone role')}</span>
+            <Tooltip
+              align="bottom-start"
+              label={t(
+                'microphoneRoleDetail',
+                'Use Patient to simulate patient-side capture with one browser. Automatic doctor/patient diarization requires STT speaker IDs.',
+              )}
+            >
+              <button
+                type="button"
+                className={styles.infoButton}
+                aria-label={t('microphoneRoleHelp', 'Microphone role details')}
+              >
+                <Information size={16} />
+              </button>
+            </Tooltip>
+          </div>
+          <RoleToggle value={captureRole} onChange={setCaptureRole} />
+        </Tile>
+
         <Tile className={styles.flowPreviewCard}>
           <div className={styles.flowPreviewHeader}>
             <h5>{t('localAiFlowPreview', 'Local AI flow')}</h5>
@@ -424,6 +450,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
         doctorLanguage={doctorLanguage}
         patientLanguage={patientLanguage}
         agentVoiceLanguage={agentVoiceLanguage}
+        captureRole={captureRole}
         demoFlowEnabled={demoFlowEnabled}
       />
     </LiveKitRoom>
@@ -445,6 +472,7 @@ interface ActiveSessionProps {
   doctorLanguage: LanguageCode;
   patientLanguage: LanguageCode;
   agentVoiceLanguage: LanguageCode;
+  captureRole: CaptureRole;
   demoFlowEnabled: boolean;
 }
 
@@ -459,6 +487,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   doctorLanguage,
   patientLanguage,
   agentVoiceLanguage,
+  captureRole,
   demoFlowEnabled,
 }) => {
   const { t } = useTranslation();
@@ -813,6 +842,7 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
   const doctorLanguageLabel = languageLabel(doctorLanguage, t);
   const patientLanguageLabel = languageLabel(patientLanguage, t);
   const agentVoiceLanguageLabel = languageLabel(agentVoiceLanguage, t);
+  const captureRoleValueLabel = captureRoleLabel(captureRole, t);
   const microphoneButtonLabel = microphoneAvailable
     ? muted
       ? t('unmute', 'Unmute')
@@ -984,6 +1014,11 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
             <Tag type="purple" size="sm">
               {t('agentVoiceLanguageValue', 'Voice: {{language}}', {
                 language: agentVoiceLanguageLabel,
+              })}
+            </Tag>
+            <Tag type={captureRole === 'patient' ? 'cyan' : 'blue'} size="sm">
+              {t('captureRoleValue', 'Capture: {{role}}', {
+                role: captureRoleValueLabel,
               })}
             </Tag>
             <Tag type="blue" size="sm">
@@ -1265,12 +1300,40 @@ const LanguageToggle: React.FC<LanguageToggleProps> = ({ label, value, onChange 
   );
 };
 
+interface RoleToggleProps {
+  value: CaptureRole;
+  onChange: (value: CaptureRole) => void;
+}
+
+const RoleToggle: React.FC<RoleToggleProps> = ({ value, onChange }) => {
+  const { t } = useTranslation();
+
+  return (
+    <div className={styles.segmentedButtons}>
+      <Button kind={value === 'doctor' ? 'primary' : 'tertiary'} size="sm" onClick={() => onChange('doctor')}>
+        {t('doctor', 'Doctor')}
+      </Button>
+      <Button
+        kind={value === 'patient' ? 'primary' : 'tertiary'}
+        size="sm"
+        onClick={() => onChange('patient')}
+      >
+        {t('patient', 'Patient')}
+      </Button>
+    </div>
+  );
+};
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
 function languageLabel(language: LanguageCode, t: ReturnType<typeof useTranslation>['t']) {
   return language === 'en' ? t('english', 'English') : t('spanish', 'Spanish');
+}
+
+function captureRoleLabel(role: CaptureRole, t: ReturnType<typeof useTranslation>['t']) {
+  return role === 'patient' ? t('patient', 'Patient') : t('doctor', 'Doctor');
 }
 
 function buildFlowSteps(
@@ -1360,6 +1423,13 @@ function transcriptRoleLabel(
 function transcriptAttributionLabel(transcript: AgentTranscript, t: ReturnType<typeof useTranslation>['t']) {
   const speakerId = transcript.speakerId || transcript.sourceId;
   if (!speakerId) {
+    if (
+      transcript.role !== 'assistant' &&
+      (transcript.attributionMode === 'default-role' || transcript.attributionSource === 'missing-speaker-id')
+    ) {
+      return `, ${t('defaultRoleAttribution', 'default role')}`;
+    }
+
     return '';
   }
 
