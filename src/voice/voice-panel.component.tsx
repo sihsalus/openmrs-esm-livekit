@@ -6,19 +6,20 @@ import {
   useLocalParticipant,
 } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
-import { Button, Tag, Tile, TextArea, TextInput, ButtonSet } from '@carbon/react';
+import { Button, ButtonSet, Tag, TextArea, TextInput, Tile, Tooltip } from '@carbon/react';
 import {
-  Microphone,
-  MicrophoneOff,
-  StopFilled,
-  Play,
   Checkmark,
-  WarningAlt,
   CircleDash,
+  Information,
   InProgress,
   Launch,
+  Microphone,
+  MicrophoneOff,
+  Play,
   Renew,
   Save,
+  StopFilled,
+  WarningAlt,
 } from '@carbon/icons-react';
 import { navigate, useConfig, usePatient, useVisit } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
@@ -74,6 +75,12 @@ type FlowStep =
   | 'patientTranslation'
   | 'openmrsDraft';
 type StepStatus = 'idle' | 'running' | 'done';
+
+interface FlowStepDefinition {
+  step: FlowStep;
+  title: string;
+  detail: string;
+}
 
 interface EncounterDraft {
   patientUuid?: string | null;
@@ -290,6 +297,12 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
         : t('startConsultation', 'Start consultation');
   const startConsultationDisabled =
     patientLoading || shouldWaitForVisit || connecting || !patientUuid || !activeVisitUuid;
+  const doctorLanguageLabel = languageLabel(doctorLanguage, t);
+  const patientLanguageLabel = languageLabel(patientLanguage, t);
+  const preflightFlowSteps = useMemo(
+    () => buildFlowSteps(t, doctorLanguageLabel, patientLanguageLabel),
+    [doctorLanguageLabel, patientLanguageLabel, t],
+  );
 
   useEffect(() => {
     if (!onPreflightActionsChange) {
@@ -334,6 +347,29 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
               onChange={updateAgentVoiceLanguage}
             />
           </div>
+        </Tile>
+
+        <Tile className={styles.flowPreviewCard}>
+          <div className={styles.flowPreviewHeader}>
+            <h5>{t('localAiFlowPreview', 'Local AI flow')}</h5>
+            <p>
+              {t(
+                'localAiFlowPreviewDetail',
+                'The agent uses the selected languages to interpret the visit and prepare a clinician-reviewable OpenMRS draft.',
+              )}
+            </p>
+          </div>
+          <ol className={styles.flowPreviewList}>
+            {preflightFlowSteps.map((item, index) => (
+              <li key={item.step}>
+                <span className={styles.flowPreviewIndex}>{index + 1}</span>
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{item.detail}</span>
+                </div>
+              </li>
+            ))}
+          </ol>
         </Tile>
 
         <PatientContext />
@@ -788,50 +824,10 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       ? t('agentConnectedWaiting', 'Agent connected. Waiting for speech or draft data.')
       : '');
 
-  const flowSteps: Array<{
-    step: FlowStep;
-    title: string;
-    detail: string;
-  }> = [
-    {
-      step: 'doctorStt',
-      title: t('doctorStt', 'Doctor STT'),
-      detail: t('doctorSttDetail', 'Capture clinician speech and produce a local transcript.'),
-    },
-    {
-      step: 'doctorTranslation',
-      title: t('translateForPatient', 'Translate for patient'),
-      detail: t(
-        'translateForPatientDetail',
-        'Redact identifiers and translate clinical meaning to {{language}} for the patient.',
-        { language: patientLanguageLabel },
-      ),
-    },
-    {
-      step: 'patientTts',
-      title: t('patientTts', 'Patient TTS'),
-      detail: t('patientTtsDetail', 'Play the translated message using the local TTS voice.'),
-    },
-    {
-      step: 'patientStt',
-      title: t('patientStt', 'Patient STT'),
-      detail: t('patientSttDetail', 'Capture patient response and transcribe it locally.'),
-    },
-    {
-      step: 'patientTranslation',
-      title: t('translateForDoctor', 'Translate for doctor'),
-      detail: t(
-        'translateForDoctorDetail',
-        'Translate the patient response back to {{language}} for the clinician.',
-        { language: doctorLanguageLabel },
-      ),
-    },
-    {
-      step: 'openmrsDraft',
-      title: t('openmrsDraft', 'OpenMRS draft'),
-      detail: t('openmrsDraftDetail', 'Compile an anonymized, clinician-reviewable encounter draft.'),
-    },
-  ];
+  const flowSteps = useMemo(
+    () => buildFlowSteps(t, doctorLanguageLabel, patientLanguageLabel),
+    [doctorLanguageLabel, patientLanguageLabel, t],
+  );
   const draftWriteConfigured = health.openmrsDraftWrite === 'ok';
   const draftWriteUnavailable = health.openmrsDraftWrite !== 'ok';
   const openSavedEncounter = useCallback(() => {
@@ -932,14 +928,48 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
       {/* ---- Local AI pipeline ---- */}
       <section className={styles.section} aria-label={t('translationFlow', 'Translation flow')}>
         <div className={styles.sectionHeader}>
-          <h5>{t('localAiPipeline', 'Local AI pipeline')}</h5>
+          <div className={styles.sectionTitleWithHelp}>
+            <h5>{t('localAiPipeline', 'Local AI pipeline')}</h5>
+            <Tooltip
+              align="bottom-start"
+              label={t(
+                'translationFlowActive',
+                'Local AI steps for doctor-patient interpretation and OpenMRS drafting.',
+              )}
+            >
+              <button
+                type="button"
+                className={styles.infoButton}
+                aria-label={t('translationFlowHelp', 'Local AI pipeline details')}
+              >
+                <Information size={16} />
+              </button>
+            </Tooltip>
+          </div>
           <Button kind="ghost" size="sm" onClick={resetFlow} disabled={demoRunning}>
             {t('resetFlow', 'Reset flow')}
           </Button>
         </div>
 
         <div className={styles.roomLanguageSummary}>
-          <span>{t('roomLanguageMetadata', 'Room language metadata')}</span>
+          <div className={styles.roomLanguageHeading}>
+            <span>{t('roomLanguageMetadata', 'Room language metadata')}</span>
+            <Tooltip
+              align="bottom-start"
+              label={t(
+                'roomLanguageMetadataDetail',
+                'The agent received these values before joining. Speaker attribution uses STT speaker IDs when available and falls back to the configured default role.',
+              )}
+            >
+              <button
+                type="button"
+                className={styles.infoButton}
+                aria-label={t('roomLanguageMetadataHelp', 'Room language metadata details')}
+              >
+                <Information size={16} />
+              </button>
+            </Tooltip>
+          </div>
           <div className={styles.roomLanguageTags}>
             <Tag type="blue" size="sm">
               {t('doctorLanguageValue', 'Doctor: {{language}}', {
@@ -963,12 +993,6 @@ const ActiveSession: React.FC<ActiveSessionProps> = ({
               {t('fixedForRoom', 'Fixed for room')}
             </Tag>
           </div>
-          <p>
-            {t(
-              'roomLanguageMetadataDetail',
-              'The agent received these values before joining. Speaker attribution uses STT speaker IDs when available and falls back to the configured default role.',
-            )}
-          </p>
         </div>
 
         <div className={styles.stepList}>
@@ -1207,8 +1231,12 @@ const StepRow: React.FC<{
       {icon}
       <div className={styles.stepText}>
         <span className={styles.stepTitle}>{title}</span>
-        <span className={styles.stepDetail}>{detail}</span>
       </div>
+      <Tooltip align="left" label={detail}>
+        <button type="button" className={styles.stepInfoButton} aria-label={`${title}: ${detail}`}>
+          <Information size={16} />
+        </button>
+      </Tooltip>
     </div>
   );
 };
@@ -1243,6 +1271,53 @@ const LanguageToggle: React.FC<LanguageToggleProps> = ({ label, value, onChange 
 
 function languageLabel(language: LanguageCode, t: ReturnType<typeof useTranslation>['t']) {
   return language === 'en' ? t('english', 'English') : t('spanish', 'Spanish');
+}
+
+function buildFlowSteps(
+  t: ReturnType<typeof useTranslation>['t'],
+  doctorLanguageLabel: string,
+  patientLanguageLabel: string,
+): Array<FlowStepDefinition> {
+  return [
+    {
+      step: 'doctorStt',
+      title: t('doctorStt', 'Doctor STT'),
+      detail: t('doctorSttDetail', 'Capture clinician speech and produce a local transcript.'),
+    },
+    {
+      step: 'doctorTranslation',
+      title: t('translateForPatient', 'Translate for patient'),
+      detail: t(
+        'translateForPatientDetail',
+        'Redact identifiers and translate clinical meaning to {{language}} for the patient.',
+        { language: patientLanguageLabel },
+      ),
+    },
+    {
+      step: 'patientTts',
+      title: t('patientTts', 'Patient TTS'),
+      detail: t('patientTtsDetail', 'Play the translated message using the local TTS voice.'),
+    },
+    {
+      step: 'patientStt',
+      title: t('patientStt', 'Patient STT'),
+      detail: t('patientSttDetail', 'Capture patient response and transcribe it locally.'),
+    },
+    {
+      step: 'patientTranslation',
+      title: t('translateForDoctor', 'Translate for doctor'),
+      detail: t(
+        'translateForDoctorDetail',
+        'Translate the patient response back to {{language}} for the clinician.',
+        { language: doctorLanguageLabel },
+      ),
+    },
+    {
+      step: 'openmrsDraft',
+      title: t('openmrsDraft', 'OpenMRS draft'),
+      detail: t('openmrsDraftDetail', 'Compile an anonymized, clinician-reviewable encounter draft.'),
+    },
+  ];
 }
 
 function buildDemoRedactedTranscript(
