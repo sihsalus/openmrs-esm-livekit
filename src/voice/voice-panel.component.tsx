@@ -296,7 +296,11 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
           patientLanguage,
           agentVoiceLanguage,
         },
-        { visitUuid: activeVisitUuid, captureRole: effectiveCaptureRole },
+        {
+          visitUuid: activeVisitUuid,
+          captureRole: effectiveCaptureRole,
+          roomSessionId: createRoomSessionId(),
+        },
       );
       setToken(result.token);
       setRoomName(result.roomName);
@@ -1425,6 +1429,14 @@ function languageLabel(language: LanguageCode, t: ReturnType<typeof useTranslati
 
 function captureRoleLabel(role: CaptureRole, t: ReturnType<typeof useTranslation>['t']) {
   return role === 'patient' ? t('patient', 'Patient') : t('doctor', 'Doctor');
+}
+
+function createRoomSessionId(): string {
+  const randomSegment =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+  return `${Date.now().toString(36)}-${randomSegment}`;
 }
 
 function inferRealFlowStepStatus({

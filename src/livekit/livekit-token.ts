@@ -11,6 +11,7 @@ export type LivekitCaptureRole = 'doctor' | 'patient';
 export interface LivekitRoomContext {
   visitUuid?: string;
   captureRole?: LivekitCaptureRole;
+  roomSessionId?: string;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -22,7 +23,7 @@ export async function fetchLivekitToken(
   languageConfig: LivekitRoomLanguageConfig,
   roomContext: LivekitRoomContext = {},
 ): Promise<{ token: string; roomName: string }> {
-  const roomName = buildRoomName(patientUuid, roomPrefix);
+  const roomName = buildRoomName(patientUuid, roomPrefix, roomContext.roomSessionId);
   const captureRole = roomContext.captureRole ?? 'doctor';
   const res = await fetch(tokenEndpoint, {
     method: 'POST',
@@ -276,10 +277,13 @@ export async function saveAiRuntimeConfig(
   return readJsonResponse<AiRuntimeConfigResponse>(res, 'AI runtime config response was not valid JSON');
 }
 
-export function buildRoomName(patientUuid: string, roomPrefix: string): string {
+export function buildRoomName(patientUuid: string, roomPrefix: string, roomSessionId?: string): string {
   const prefix = roomPrefix?.trim() || 'openmrs-voice-';
   const safePatientUuid = patientUuid.replace(/[^a-zA-Z0-9_-]/g, '-');
-  return `${prefix}${safePatientUuid}`;
+  const safeRoomSessionId = roomSessionId?.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
+  return safeRoomSessionId
+    ? `${prefix}${safePatientUuid}-${safeRoomSessionId}`
+    : `${prefix}${safePatientUuid}`;
 }
 
 export function resolveLivekitServerUrl(configuredUrl?: string): string {
