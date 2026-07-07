@@ -24,9 +24,12 @@ import {
 import { navigate, useConfig, usePatient, useVisit } from '@openmrs/esm-framework';
 import { useTranslation } from 'react-i18next';
 import {
+  aiRuntimeUsesAutoDiarization,
   buildOpenmrsDraftWritePayload,
   buildQueuedOpenmrsDraftPayload,
+  fetchAiRuntimeConfig,
   fetchLivekitToken,
+  type AiRuntimeConfigResponse,
   type LivekitCaptureRole,
   saveOpenmrsDraft,
 } from '../livekit/livekit-token';
@@ -195,12 +198,17 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
   const [patientLanguage, setPatientLanguage] = useState<LanguageCode>(defaultLanguages.patientLanguage);
   const [agentVoiceLanguage, setAgentVoiceLanguage] = useState<LanguageCode>(defaultLanguages.doctorLanguage);
   const [captureRole, setCaptureRole] = useState<CaptureRole>('doctor');
+  const [aiRuntimeConfig, setAiRuntimeConfig] = useState<AiRuntimeConfigResponse | null>(null);
+  const [aiRuntimeLoading, setAiRuntimeLoading] = useState(false);
   const activeVisitUuid = activeVisit?.uuid ?? '';
   const shouldWaitForVisit = Boolean(patientUuid) && activeVisitLoading;
   const activeVisitRequiredMessage = t(
     'activeVisitRequiredDetail',
     'Start an active visit before opening a voice consultation so any reviewed draft can be attached to that visit.',
   );
+  const effectiveAiRuntimeConfig = aiRuntimeConfig?.effectiveConfig ?? aiRuntimeConfig?.config ?? null;
+  const autoDiarizationEnabled = aiRuntimeUsesAutoDiarization(effectiveAiRuntimeConfig);
+  const effectiveCaptureRole = autoDiarizationEnabled ? 'doctor' : captureRole;
 
   useEffect(() => {
     if (languageSelectionTouched.current) {
@@ -213,6 +221,41 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
       setAgentVoiceLanguage(defaultLanguages.doctorLanguage);
     }
   }, [defaultLanguages.doctorLanguage, defaultLanguages.patientLanguage]);
+
+  useEffect(() => {
+    if (token) {
+      return;
+    }
+
+    let cancelled = false;
+    setAiRuntimeLoading(true);
+    fetchAiRuntimeConfig(tokenEndpoint)
+      .then((runtimeConfig) => {
+        if (!cancelled) {
+          setAiRuntimeConfig(runtimeConfig);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAiRuntimeConfig(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAiRuntimeLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, tokenEndpoint]);
+
+  useEffect(() => {
+    if (autoDiarizationEnabled) {
+      setCaptureRole('doctor');
+    }
+  }, [autoDiarizationEnabled]);
 
   const updateDoctorLanguage = useCallback((language: LanguageCode) => {
     languageSelectionTouched.current = true;
@@ -253,7 +296,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
           patientLanguage,
           agentVoiceLanguage,
         },
-        { visitUuid: activeVisitUuid, captureRole },
+        { visitUuid: activeVisitUuid, captureRole: effectiveCaptureRole },
       );
       setToken(result.token);
       setRoomName(result.roomName);
@@ -273,8 +316,8 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
     activeVisitRequiredMessage,
     activeVisitUuid,
     agentVoiceLanguage,
-    captureRole,
     doctorLanguage,
+    effectiveCaptureRole,
     patientLanguage,
     patientUuid,
     roomPrefix,
@@ -359,10 +402,17 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
             <span>{t('microphoneRole', 'Microphone role')}</span>
             <Tooltip
               align="bottom-start"
-              label={t(
-                'microphoneRoleDetail',
-                'Use Patient to simulate patient-side capture with one browser. Automatic doctor/patient diarization requires STT speaker IDs.',
-              )}
+              label={
+                autoDiarizationEnabled
+                  ? t(
+                      'autoDiarizationDetail',
+                      'Deepgram diarization is active. Speaker IDs are used automatically; Doctor remains the fallback role if no speaker ID is available.',
+                    )
+                  : t(
+                      'microphoneRoleDetail',
+                      'Use Patient to simulate patient-side capture with one browser. Automatic doctor/patient diarization requires STT speaker IDs.',
+                    )
+              }
             >
               <button
                 type="button"
@@ -373,7 +423,19 @@ const VoicePanel: React.FC<VoicePanelProps> = ({ onClose, onPreflightActionsChan
               </button>
             </Tooltip>
           </div>
-          <RoleToggle value={captureRole} onChange={setCaptureRole} />
+          <div className={styles.captureRoleControls}>
+            {autoDiarizationEnabled && (
+              <Tag type="purple" size="sm">
+                {t('autoDiarization', 'Auto diarization')}
+              </Tag>
+            )}
+            {aiRuntimeLoading && !autoDiarizationEnabled && (
+              <Tag type="gray" size="sm">
+                {t('checkingDiarization', 'Checking diarization')}
+              </Tag>
+            )}
+            <RoleToggle value={captureRole} onChange={setCaptureRole} disabled={autoDiarizationEnabled} />
+          </div>
         </Tile>
 
         <Tile className={styles.flowPreviewCard}>
@@ -1304,20 +1366,27 @@ const LanguageToggle: React.FC<LanguageToggleProps> = ({ label, value, onChange 
 interface RoleToggleProps {
   value: CaptureRole;
   onChange: (value: CaptureRole) => void;
+  disabled?: boolean;
 }
 
-const RoleToggle: React.FC<RoleToggleProps> = ({ value, onChange }) => {
+const RoleToggle: React.FC<RoleToggleProps> = ({ value, onChange, disabled = false }) => {
   const { t } = useTranslation();
 
   return (
     <div className={styles.segmentedButtons}>
-      <Button kind={value === 'doctor' ? 'primary' : 'tertiary'} size="sm" onClick={() => onChange('doctor')}>
+      <Button
+        kind={value === 'doctor' ? 'primary' : 'tertiary'}
+        size="sm"
+        onClick={() => onChange('doctor')}
+        disabled={disabled}
+      >
         {t('doctor', 'Doctor')}
       </Button>
       <Button
         kind={value === 'patient' ? 'primary' : 'tertiary'}
         size="sm"
         onClick={() => onChange('patient')}
+        disabled={disabled}
       >
         {t('patient', 'Patient')}
       </Button>

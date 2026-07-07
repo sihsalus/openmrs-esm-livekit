@@ -172,6 +172,12 @@ export interface AiRuntimeConfigResponse {
   warnings?: string[];
 }
 
+export function aiRuntimeUsesAutoDiarization(config?: AiRuntimeConfig | null): boolean {
+  return Boolean(
+    config?.sttProvider === 'deepgram' && config.deepgramEnableDiarization && !config.deepgramUseFlux,
+  );
+}
+
 export function buildQueuedOpenmrsDraftPayload(
   payload: Omit<OpenmrsDraftPayload, 'writeToOpenmrs'>,
 ): OpenmrsDraftPayload {
